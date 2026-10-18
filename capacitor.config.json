@@ -1,0 +1,13 @@
+{
+  "appId": "dev.valware.prism",
+  "appName": "Prism",
+  "webDir": "mobile/www",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#07080c"
+  }
+}

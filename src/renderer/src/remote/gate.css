@@ -1,0 +1,123 @@
+/* the phone app's pairing and connecting screen (gate.tsx) */
+.gate {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+  background: radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%), var(--bg-0);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+.gate-card {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gate-logo {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.gate-title {
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+.gate-sub {
+  font-size: 14px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.gate-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.gate-field input,
+.gate-field textarea {
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  padding: 12px 14px;
+  outline: none;
+}
+.gate-field input:focus,
+.gate-field textarea:focus {
+  border-color: var(--accent);
+}
+.gate-btn {
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: 0;
+  border-radius: 14px;
+  padding: 14px;
+  cursor: pointer;
+}
+.gate-btn.ghost {
+  color: var(--text);
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+}
+.gate-btn:disabled {
+  opacity: 0.5;
+}
+.gate-row {
+  display: flex;
+  gap: 10px;
+}
+.gate-row .gate-btn {
+  flex: 1;
+}
+.gate-error {
+  font-size: 14px;
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 10%, transparent);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.gate-spinner {
+  width: 28px;
+  height: 28px;
+  margin: 10px auto;
+  border-radius: 50%;
+  border: 3px solid var(--line-strong);
+  border-top-color: var(--accent);
+  animation: gate-spin 0.8s linear infinite;
+}
+@keyframes gate-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.gate-scan {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gate-scan video {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 16px;
+  background: #000;
+}
+.gate-frame {
+  position: absolute;
+  inset: 12% 12% calc(12% + 60px);
+  border: 3px solid color-mix(in srgb, var(--accent) 80%, white);
+  border-radius: 18px;
+  pointer-events: none;
+}

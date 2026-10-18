@@ -1,0 +1,22 @@
+{
+  "id": "launch-kit",
+  "name": "Launch kit",
+  "description": "What a finished thing needs to reach people: the store listing within each store's limits, screenshots at the sizes stores ask for, a release video and a web page. Nothing is put online.",
+  "agent": "Launching: launch_status, launch_listing (store text, checked against each store's limits), launch_screenshot (a page or picture at a store's exact size, with a caption if wanted), launch_site (a one-page site from the listing). Everything goes in launch/; never publish anything without asking.",
+  "intro": {
+    "icon": "ticket",
+    "colour": "#f5e08f",
+    "tagline": "Everything you need to show a finished thing to the world.",
+    "what": "When something is finished and you want people to find it (say, putting the phone app in the Google Play store), you need more than the app: words for the store page, screenshots at the exact sizes the store wants, maybe a short video, and a web page about it. This makes all of those. Nothing goes online until you decide.",
+    "helps": [
+      "Store text is checked against each store’s rules as you write.",
+      "Screenshots come out at exactly the right size, with captions.",
+      "A good-looking web page made from the same words and pictures."
+    ],
+    "example": "Like a bake sale: the app is the cake, and this makes the sign, the photo and the poster that get people to try it."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "workspace": "write"
+  }
+}

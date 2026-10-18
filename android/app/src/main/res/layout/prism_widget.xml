@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A gadget on the home screen. A widget cannot run a web page, so what is shown is a
+  picture of the gadget taken on this phone, with real buttons beneath it for the
+  actions the gadget declares. Tapping the picture opens the gadget in the app.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/prism_widget_bg"
+    android:padding="10dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="6dp">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="#E9ECF4"
+            android:textSize="12sp"
+            android:text="@string/app_name" />
+
+        <TextView
+            android:id="@+id/widget_when"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#6D7489"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <ImageView
+        android:id="@+id/widget_shot"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scaleType="fitCenter"
+        android:adjustViewBounds="true"
+        android:contentDescription="@string/widget_shot_description" />
+
+    <TextView
+        android:id="@+id/widget_problem"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:textColor="#FF7B93"
+        android:textSize="13sp"
+        android:visibility="gone"
+        android:text="@string/widget_unreachable" />
+
+    <LinearLayout
+        android:id="@+id/widget_actions"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="8dp"
+        android:visibility="gone">
+
+        <Button
+            android:id="@+id/widget_action_0"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/prism_widget_btn"
+            android:textColor="#E9ECF4"
+            android:textSize="12sp"
+            android:textAllCaps="false"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/widget_action_1"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/prism_widget_btn"
+            android:textColor="#E9ECF4"
+            android:textSize="12sp"
+            android:textAllCaps="false"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/widget_action_2"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:background="@drawable/prism_widget_btn"
+            android:textColor="#E9ECF4"
+            android:textSize="12sp"
+            android:textAllCaps="false"
+            android:visibility="gone" />
+    </LinearLayout>
+</LinearLayout>

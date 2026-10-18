@@ -1,0 +1,14 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Prism</string>
+    <string name="title_activity_main">Prism</string>
+    <string name="package_name">dev.valware.prism</string>
+    <string name="custom_url_scheme">dev.valware.prism</string>
+    <string name="widget_label">Prism gadget</string>
+    <string name="widget_description">A gadget from Prism on your home screen.</string>
+    <string name="widget_shot_description">The gadget as it looks now</string>
+    <string name="widget_unreachable">Prism is not reachable</string>
+    <string name="widget_pick">Which gadget?</string>
+    <string name="widget_loading">Asking Prism…</string>
+    <string name="widget_none">No gadgets. Pair the app with Prism first.</string>
+</resources>

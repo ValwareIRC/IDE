@@ -1,0 +1,330 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  /* clip, not hidden: hidden still lets focus or scrollIntoView shift the whole window */
+  overflow: clip;
+}
+
+body {
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+}
+
+::selection {
+  background: var(--accent-35);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+code,
+kbd,
+pre,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: contextual;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(from var(--tint) r g b / 0.08);
+  border-radius: calc(6px * var(--round));
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(from var(--tint) r g b / 0.16);
+  background-clip: content-box;
+  border: 2px solid transparent;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* the code editor shows a cursor; a ring around its typing layer would box the current line */
+.monaco-editor :focus-visible {
+  outline: none;
+}
+
+/* ---- ambience: what sits behind every panel. The theme picks the style (data-ambience on <html>) and its strength (--amb-*). */
+
+.ambience {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(900px 520px at 8% -8%, color-mix(in srgb, var(--accent) var(--amb-a, 9%), transparent), transparent 62%),
+    radial-gradient(800px 480px at 100% 110%, color-mix(in srgb, var(--accent-2) var(--amb-b, 8%), transparent), transparent 60%),
+    radial-gradient(1200px 700px at 50% 50%, rgb(from var(--tint) r g b / 0.012), transparent 70%);
+}
+
+.ambience::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(from var(--tint) r g b / var(--amb-grid, 0.022)) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(from var(--tint) r g b / var(--amb-grid, 0.022)) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.55), transparent 78%);
+}
+
+:root[data-ambience='plain'] .ambience {
+  background: none;
+}
+
+:root[data-ambience='plain'] .ambience::after,
+:root[data-ambience='mesh'] .ambience::after,
+:root[data-ambience='picture'] .ambience::after {
+  display: none;
+}
+
+/* a floor of lines running to the horizon */
+:root[data-ambience='grid'] .ambience {
+  background: radial-gradient(1200px 520px at 50% 118%, color-mix(in srgb, var(--accent) var(--amb-a, 9%), transparent), transparent 70%);
+}
+
+:root[data-ambience='grid'] .ambience::after {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--accent) calc(var(--amb-a, 9%) * 1.6), transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-2) calc(var(--amb-b, 8%) * 1.6), transparent) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent 78%);
+}
+
+/* soft pools of every theme colour */
+:root[data-ambience='mesh'] .ambience {
+  background:
+    radial-gradient(60% 55% at 0% 0%, color-mix(in srgb, var(--accent) calc(var(--amb-a, 9%) * 1.5), transparent), transparent 70%),
+    radial-gradient(55% 60% at 100% 0%, color-mix(in srgb, var(--violet) calc(var(--amb-b, 8%) * 1.3), transparent), transparent 70%),
+    radial-gradient(60% 60% at 100% 100%, color-mix(in srgb, var(--accent-2) calc(var(--amb-a, 9%) * 1.5), transparent), transparent 70%),
+    radial-gradient(55% 55% at 0% 100%, color-mix(in srgb, var(--mint) calc(var(--amb-b, 8%) * 1.1), transparent), transparent 70%);
+}
+
+:root[data-ambience='stars'] .ambience {
+  background:
+    radial-gradient(900px 520px at 80% -10%, color-mix(in srgb, var(--accent) var(--amb-a, 9%), transparent), transparent 62%),
+    radial-gradient(700px 420px at 0% 100%, color-mix(in srgb, var(--accent-2) var(--amb-b, 8%), transparent), transparent 60%);
+}
+
+:root[data-ambience='stars'] .ambience::after {
+  opacity: var(--amb-k, 1);
+  background-image:
+    radial-gradient(1px 1px at 22px 34px, rgb(from var(--tint) r g b / 0.75), transparent),
+    radial-gradient(1px 1px at 141px 87px, rgb(from var(--tint) r g b / 0.5), transparent),
+    radial-gradient(1.5px 1.5px at 203px 161px, color-mix(in srgb, var(--accent) 80%, transparent), transparent),
+    radial-gradient(1px 1px at 77px 199px, rgb(from var(--tint) r g b / 0.4), transparent),
+    radial-gradient(1px 1px at 259px 41px, rgb(from var(--tint) r g b / 0.6), transparent),
+    radial-gradient(1.5px 1.5px at 118px 243px, color-mix(in srgb, var(--accent-2) 70%, transparent), transparent),
+    radial-gradient(1px 1px at 301px 222px, rgb(from var(--tint) r g b / 0.45), transparent);
+  background-size: 331px 277px;
+  mask-image: none;
+}
+
+/* an old screen: fine horizontal lines and darker corners */
+:root[data-ambience='scanlines'] .ambience {
+  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--accent) var(--amb-a, 9%), transparent), transparent 75%);
+}
+
+:root[data-ambience='scanlines'] .ambience::after {
+  background-image: repeating-linear-gradient(to bottom, rgb(from var(--tint) r g b / calc(var(--amb-grid, 0.022) * 1.6)) 0 1px, transparent 1px 3px);
+  background-size: auto;
+  mask-image: none;
+}
+
+:root[data-ambience='picture'] .ambience {
+  inset: calc(var(--picture-blur, 0px) * -2);
+  background: var(--picture) center / cover no-repeat;
+  filter: blur(var(--picture-blur, 0px));
+}
+
+/* the picture is washed towards the backdrop colour so text stays readable */
+:root[data-ambience='picture'] .ambience::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(from var(--bg-0) r g b / var(--picture-dim, 0.55));
+}
+
+/* small headings as ordinary text instead of spaced capitals */
+:root[data-labels='plain'] {
+  --label-case: none;
+  --label-space: 0;
+}
+
+.app {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: grid;
+  grid-template-rows: var(--titlebar-h) 1fr var(--statusbar-h);
+}
+
+.app-body {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+}
+
+.dock-host {
+  min-width: 0;
+  min-height: 0;
+  padding: 6px 8px 6px 2px;
+}
+
+/* ---- utilities */
+
+.dim {
+  color: var(--text-2);
+}
+.faint {
+  color: var(--text-3);
+}
+.small {
+  font-size: var(--fs-sm);
+}
+.xs {
+  font-size: var(--fs-xs);
+}
+.accent {
+  color: var(--accent);
+}
+.mint {
+  color: var(--mint);
+}
+.amber {
+  color: var(--amber);
+}
+.rose {
+  color: var(--rose);
+}
+.violet {
+  color: var(--violet);
+}
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.selectable {
+  user-select: text;
+}
+
+.hud-label {
+  font-size: var(--fs-xs);
+  letter-spacing: var(--label-space, 0.12em);
+  text-transform: var(--label-case, uppercase);
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}

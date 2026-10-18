@@ -1,0 +1,23 @@
+{
+  "id": "setup",
+  "name": "Setup",
+  "description": "What a project needs to build and run, and what this computer needs, each with why: checked on any machine, after any update, and written out as a setup script.",
+  "agent": "Reproducible setups: setup_check (is this computer ready, and the fix for each thing that is not), setup_detect (what the project's files say it needs), setup_record (record a need with its reason, including pins learned the hard way, for the project or for this computer). Check it when a build fails after an update or on a new machine.",
+  "intro": {
+    "icon": "wrench",
+    "colour": "#f5d48f",
+    "tagline": "Remembers everything a project needs to run, and why.",
+    "what": "A project needs certain programs and settings to work: the right version of Node, Java 21 for the phone app, a special setting for ollama on this graphics card. This writes them all down with the reason for each, checks this computer has them, and can make a script that sets up a new computer.",
+    "helps": [
+      "After an update breaks something, it shows what changed.",
+      "A new computer can be set up from the list, not from memory.",
+      "The hard-won fixes (like the ollama setting) are never forgotten."
+    ],
+    "example": "A build suddenly fails. You press \"Check this computer\" and it shows Java has been updated to a version the phone build cannot use, with the command that fixes it."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "shell": true,
+    "workspace": "write"
+  }
+}

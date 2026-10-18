@@ -1,0 +1,23 @@
+{
+  "id": "profiler",
+  "name": "Profiling",
+  "description": "Find out why something is slow by measuring it: time a command over several runs and keep the history, or see where a Node or Python program spends its time as a flame chart.",
+  "agent": "Profiling: profile_time (time a command, compared with last time), profile_where (where a Node or Python program spends its time), profile_history. Measure before guessing why something is slow, and after a change meant to speed it up.",
+  "intro": {
+    "icon": "gauge",
+    "colour": "#f5a98f",
+    "tagline": "Finds out why something is slow, by measuring it.",
+    "what": "When something is slow, guessing why often gets it wrong. This times a command over several runs and keeps the results, so you can see if a change made it faster. For JavaScript and Python programs it also shows which parts take the time, as a colourful chart.",
+    "helps": [
+      "Fixes are aimed at the real cause, not a guess.",
+      "A history shows whether things are getting faster or slower.",
+      "The chart makes the slow part easy to see."
+    ],
+    "example": "The build feels slow. Prism times it (42 seconds), finds most of it is spent shrinking pictures, fixes that, and times it again: 18 seconds."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "shell": true,
+    "workspace": "read"
+  }
+}

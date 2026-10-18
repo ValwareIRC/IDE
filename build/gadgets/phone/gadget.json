@@ -1,0 +1,24 @@
+{
+  "id": "phone",
+  "name": "Phone",
+  "description": "Test on your real phone over Wi-Fi: install the app, see and touch the screen, and read the app's log. Prism uses it only when you ask.",
+  "agent": "Testing on the user's real phone over Wi-Fi: phone_status, phone_install, phone_screen, phone_do, phone_logs, and phone_accessibility (things TalkBack cannot name, things too small to tap). Only when the user has asked, each time; never on your own initiative.",
+  "intro": {
+    "icon": "smartphone",
+    "colour": "#9fd8f5",
+    "tagline": "Lets Prism test the phone app on your real phone.",
+    "what": "Your phone and this computer link up over Wi-Fi. Then Prism can put a new version of an Android app onto your phone, see the screen, tap and type on it, and read the notes the app writes about itself, all without you doing it by hand.",
+    "helps": [
+      "Prism finds problems on the phone before you do.",
+      "No more installing every test version yourself.",
+      "You can watch everything it does, and it only touches your phone when you ask."
+    ],
+    "example": "You say \"check the notification buttons work on my phone\". Prism installs the app, opens it, taps the button, looks at the screen and tells you what happened."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "shell": true,
+    "network": true,
+    "workspace": "read"
+  }
+}

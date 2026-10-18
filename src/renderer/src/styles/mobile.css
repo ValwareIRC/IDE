@@ -1,0 +1,406 @@
+/* the phone app (shell/MobileShell.tsx): same panels, sized for a finger */
+html.mobile {
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-base: 15px;
+  --fs-lg: 16.5px;
+  --fs-xl: 20px;
+  -webkit-tap-highlight-color: transparent;
+}
+html.mobile,
+html.mobile body,
+html.mobile #root {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.m-app {
+  position: relative;
+  z-index: 1;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  /* clear of Android's home, back and recent-apps buttons: the tab bar used to keep this gap */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.m-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--line);
+  background: var(--glass-strong);
+  backdrop-filter: blur(14px);
+}
+.m-icon {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-2);
+}
+.m-icon:active {
+  background: var(--bg-3);
+}
+.m-icon-space {
+  width: 8px;
+}
+.m-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.m-title-main {
+  font-size: 16px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.m-project {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12.5px;
+}
+.m-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mint);
+}
+.m-dot.connecting {
+  background: var(--amber);
+}
+.m-dot.lost {
+  background: var(--rose);
+}
+.m-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, var(--bg-1));
+  border-bottom: 1px solid var(--line);
+}
+.m-banner > span {
+  flex: 1;
+  min-width: 0;
+}
+/* big enough to hit with a thumb, which is the only way anyone presses it */
+.m-banner-retry {
+  flex: none;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  background: color-mix(in srgb, var(--amber) 16%, transparent);
+  color: var(--amber);
+  font: inherit;
+  font-weight: 600;
+}
+.m-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.m-page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.m-page[hidden] {
+  display: none;
+}
+.m-page > * {
+  flex: 1;
+  min-height: 0;
+}
+.m-side {
+  height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+.m-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--text-3);
+  text-align: center;
+}
+.m-empty-title {
+  font-size: 18px;
+  color: var(--text);
+}
+.m-tabs {
+  display: flex;
+  border-top: 1px solid var(--line);
+  background: var(--glass-strong);
+  backdrop-filter: blur(14px);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.m-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 0 4px;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 10.5px;
+}
+.m-tab.on {
+  color: var(--accent);
+}
+.m-tab-icon {
+  position: relative;
+}
+.m-badge {
+  position: absolute;
+  top: -2px;
+  right: -5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-1);
+}
+.m-badge.running {
+  background: var(--accent);
+}
+.m-badge.waiting {
+  background: var(--amber);
+}
+.m-sheet-back {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+}
+.m-sheet {
+  width: 100%;
+  max-height: 80dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  border-radius: 18px 18px 0 0;
+  border-top: 1px solid var(--line-strong);
+  padding-bottom: env(safe-area-inset-bottom);
+  animation: m-up var(--t-med) var(--ease);
+}
+@keyframes m-up {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+}
+.m-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 4px 18px;
+  font-size: 16px;
+  font-weight: 650;
+}
+.m-sheet-body {
+  overflow: auto;
+  padding: 4px 8px 12px;
+}
+.m-row {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+}
+.m-row:active,
+.m-row.on {
+  background: var(--bg-3);
+}
+.m-row:disabled {
+  opacity: 0.4;
+}
+.m-row.danger {
+  color: var(--rose);
+}
+.m-row-back {
+  color: var(--text-2);
+  min-height: 40px;
+}
+.m-row-check {
+  width: 14px;
+  color: var(--accent);
+}
+.m-row-hint {
+  color: var(--text-3);
+}
+.m-row-two {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.m-row-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.m-pill {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--accent-12);
+  color: var(--accent);
+}
+.m-sep {
+  height: 1px;
+  margin: 4px 12px;
+  background: var(--line);
+}
+.m-note {
+  padding: 14px;
+  color: var(--text-3);
+}
+
+/* A gadget being photographed for a home screen widget (shell/WidgetShell.tsx): the
+   gadget fills the picture, with none of the app's own furniture in it. */
+.widget-only {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1, #0f1219);
+}
+
+.widget-only > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.widget-only .gadget-bar,
+.widget-only .gadget-change {
+  display: none;
+}
+
+.widget-wait {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  text-align: center;
+  color: var(--text-2, #a7aec0);
+  background: var(--bg-1, #0f1219);
+  font-size: 13px;
+}
+
+/* The places (agent, chats, files, git, gadgets, terminal), in a drawer from the left
+   instead of a bar along the bottom of the screen. */
+.m-drawer-back {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.45);
+  animation: m-fade var(--t-med) var(--ease);
+}
+.m-drawer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(78vw, 300px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: calc(env(safe-area-inset-top) + 10px) 8px calc(env(safe-area-inset-bottom) + 10px);
+  background: var(--bg-2);
+  border-right: 1px solid var(--line-strong);
+  box-shadow: 8px 0 30px rgba(0, 0, 0, 0.35);
+  animation: m-slide var(--t-med) var(--ease);
+}
+.m-drawer-head {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 12px 14px;
+}
+.m-drawer-name {
+  font-size: 18px;
+  font-weight: 650;
+}
+.m-drawer-row {
+  min-height: 50px;
+  gap: 14px;
+}
+.m-drawer-row.on {
+  color: var(--accent);
+}
+@keyframes m-slide {
+  from {
+    transform: translateX(-100%);
+  }
+}
+@keyframes m-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The top bar on one line: the page's name and the project side by side, where they
+   used to sit on two lines with the width mostly empty. */
+.m-top {
+  padding: 2px 4px;
+}
+.m-top .m-icon {
+  width: 38px;
+  height: 38px;
+}
+.m-title {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.m-title-main {
+  flex: none;
+}
+.m-project {
+  align-self: center;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}

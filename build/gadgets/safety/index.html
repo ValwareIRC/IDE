@@ -1,0 +1,218 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.04); flex-wrap: wrap; min-width: 0; }
+  .row:last-child { border-bottom: 0; }
+  .row .k-grow { display: flex; flex-direction: column; min-width: 0; }
+  .ver { font-family: var(--font-mono, monospace); font-size: 12px; color: var(--text-2, #a7aec0); white-space: nowrap; }
+  .stat { cursor: pointer; }
+  .stat:hover { border-color: rgba(255,255,255,.18); }
+  .stat b.ok { color: var(--mint, #7ee2b8); } .stat b.warn { color: var(--amber, #f5c97a); } .stat b.bad { color: var(--rose, #f59ab0); }
+  label.k-check { display: flex; gap: 8px; align-items: center; font-size: 12.5px; cursor: pointer; }
+  .sev-critical, .sev-high { color: var(--rose, #f59ab0); border-color: color-mix(in srgb, var(--rose, #f59ab0) 40%, transparent); }
+  .sev-moderate, .sev-medium { color: var(--amber, #f5c97a); border-color: color-mix(in srgb, var(--amber, #f5c97a) 40%, transparent); }
+  a { color: var(--accent, #8ad8ff); }
+  .credit-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 6px; }
+  .preview { font-family: var(--font-mono, monospace); font-size: 11.5px; color: var(--text-2, #a7aec0); word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="k-app">
+  <div class="k-top">
+    <span class="k-title">Safety</span>
+    <button class="ghost small" id="all">Check everything</button>
+  </div>
+  <div id="tabs"></div>
+  <div class="k-body" id="body"><div class="k-empty">Looking at the project…</div></div>
+</div>
+<script>
+const { h, mount, ago, toast, act, ask } = kit
+let o = null
+let tab = 'overview'
+let busy = []
+let allLicences = false
+const $ = (id) => document.getElementById(id)
+
+async function load() {
+  o = await prism.call('overview')
+  busy = o.busy ?? []
+  render()
+}
+
+const last = (k) => o?.last?.[k] ?? null
+
+function render() {
+  if (!o?.project) return mount('#body', h('div', { class: 'k-empty' }, 'Open a project to check it.'))
+  mount('#tabs', kit.tabs([['overview', 'Overview'], ['updates', 'Updates'], ['holes', 'Security holes'], ['licences', 'Licences'], ['secrets', 'Secrets']], tab, (t) => { tab = t; render() }))
+  $('all').disabled = busy.length > 0
+  mount('#body', { overview, updates: updatesTab, holes: holesTab, licences: licencesTab, secrets: secretsTab }[tab]())
+}
+
+async function check(key, args) {
+  busy = [...new Set([...busy, key])]
+  render()
+  await act(() => prism.call(key, args ?? {}))
+  await load()
+}
+
+function checkedLine(key, label) {
+  const v = last(key)
+  const running = busy.includes(key)
+  return h('div', { class: 'k-row' },
+    h('span', { class: 'k-hint k-grow' }, running ? 'Checking…' : v ? `Checked ${ago(v.at)}.` : 'Not checked yet.'),
+    h('button', { class: 'small', disabled: running, onclick: () => check(key, key === 'licences' ? { all: allLicences } : undefined) }, running ? 'Checking…' : v ? 'Check again' : label))
+}
+
+// ---------------------------------------------------------------- overview
+
+function overview() {
+  const u = last('updates'), x = last('holes'), l = last('licences'), s = last('secrets')
+  const serious = x ? x.list.filter((v) => ['critical', 'high'].includes(v.severity) && !v.onlyWhileBuilding).length : 0
+  const stat = (key, value, cls, label) => h('div', { class: 'k-stat stat', onclick: () => { tab = key; render() } }, h('b', { class: cls }, value), h('span', {}, label))
+  const worry = l ? l.packages.filter((p) => ['strong', 'unknown'].includes(p.class)).length : 0
+  return [
+    h('div', { class: 'k-grid' },
+      stat('updates', u ? String(u.list.filter((v) => v.safe).length) : '–', u && u.list.some((v) => v.safe) ? 'warn' : 'ok', u ? `safe updates, ${u.list.filter((v) => !v.safe).length} bigger` : 'updates not checked'),
+      stat('holes', x ? String(x.list.length) : '–', !x ? '' : serious ? 'bad' : x.list.length ? 'warn' : 'ok', x ? (serious ? `known holes, ${serious} serious in what ships` : 'known holes, none serious in what ships') : 'holes not checked'),
+      stat('licences', l ? String(worry) : '–', !l ? '' : worry ? 'warn' : 'ok', l ? 'licences worth a look' : 'licences not checked'),
+      stat('secrets', s ? String(s.list.length) : '–', !s ? '' : s.list.length ? 'bad' : 'ok', s ? 'secrets waiting to be committed' : 'secrets not checked')),
+    h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'Commits are ' + (o.guard.on ? 'guarded' : 'not guarded')),
+      h('div', { class: 'k-hint' }, o.guard.on ? 'Every commit is checked for passwords and keys first, and stopped if one is found.' : 'Turn this on and every commit in this project is checked for passwords and keys first. A secret once committed stays in the history even after it is removed.'),
+      guardButton()),
+    o.kinds.length ? h('div', { class: 'k-hint' }, `This project uses ${o.kinds.map((k) => k.kind === 'node' ? `JavaScript packages (${k.pm})` : k.kind === 'python' ? 'Python packages' : 'Rust crates').join(', ')}.`) : h('div', { class: 'k-hint' }, 'No package list was found here (package.json, requirements.txt, pyproject.toml or Cargo.toml).')
+  ]
+}
+
+function guardButton() {
+  if (!o.guard.git) return h('div', { class: 'k-hint' }, 'This project is not in git.')
+  if (o.guard.other) return h('div', { class: 'k-hint warn-text' }, 'This project has a pre-commit hook of its own, so Prism leaves it alone. Ask Prism to add the secrets check to it.')
+  return h('div', { class: 'k-btns' }, h('button', { class: o.guard.on ? '' : 'primary', onclick: () => act(async () => { o.guard = await prism.call('guard', { on: !o.guard.on }); render() }, o.guard.on ? 'Guard off' : 'Guard on') }, o.guard.on ? 'Turn the guard off' : 'Guard every commit'))
+}
+
+// ---------------------------------------------------------------- updates
+
+function updatesTab() {
+  const v = last('updates')
+  const safe = v ? v.list.filter((u) => u.safe) : []
+  const big = v ? v.list.filter((u) => !u.safe) : []
+  const row = (u) => h('div', { class: 'row' },
+    h('div', { class: 'k-grow' }, h('span', { class: 'k-trunc' }, u.name), h('span', { class: 'ver' }, `${u.from} → ${u.to}`)),
+    u.dev ? h('span', { class: 'k-pill' }, 'build tool') : null,
+    u.deprecated ? h('span', { class: 'k-pill bad' }, 'no longer kept up') : null,
+    !u.safe ? h('button', { class: 'small', onclick: () => act(() => prism.call('askAgent', { text: `What would updating ${u.name} from ${u.from} to ${u.to} involve in this project? Read what changed between them (breaking changes especially) and look at how the project uses it. Do not change anything yet.` }), 'Asked Prism') }, 'What would it take?') : null)
+  return [
+    checkedLine('updates', 'Check for updates'),
+    ...(v?.notes ?? []).map((n) => h('div', { class: 'k-hint warn-text' }, n)),
+    v ? h('div', { class: 'k-card' },
+      h('h3', {}, safe.length ? `${safe.length} safe to take` : 'Nothing safe to take'),
+      h('div', { class: 'k-hint' }, 'Same major version: fixes and additions that should not break anything.'),
+      safe.map(row),
+      safe.length ? h('div', { class: 'k-btns', style: { marginTop: '8px' } }, h('button', { class: 'primary', onclick: () => act(() => prism.call('askAgent', { text: `Update these packages, and only these, to these versions: ${safe.map((u) => `${u.name} ${u.to}`).join(', ')}. Then run the project's checks and build, and tell me plainly whether anything broke.` }), 'Asked Prism') }, 'Ask Prism to take them and check')) : null) : null,
+    big.length ? h('div', { class: 'k-card' }, h('h3', {}, `${big.length} bigger changes`), h('div', { class: 'k-hint' }, 'A new major version may need changes in the project. Each is worth reading about first.'), big.map(row)) : null
+  ]
+}
+
+// ---------------------------------------------------------------- holes
+
+function holesTab() {
+  const v = last('holes')
+  return [
+    checkedLine('holes', 'Look for known holes'),
+    ...(v?.notes ?? []).map((n) => h('div', { class: 'k-hint warn-text' }, n)),
+    v && !v.list.length ? h('div', { class: 'k-empty' }, h('span', { class: 'ok-text' }, 'No known security holes.')) : null,
+    v?.list.length ? h('div', { class: 'k-card' },
+      v.list.map((x) => h('div', { class: 'row' },
+        h('span', { class: `k-pill sev-${x.severity}` }, x.severity),
+        h('div', { class: 'k-grow' },
+          h('span', {}, x.title),
+          h('span', { class: 'k-hint' }, `${x.name} ${x.versions.join(', ')} · fixed in ${x.fixedIn}${x.via.length ? ` · through ${x.via[0]}` : ''}`)),
+        x.onlyWhileBuilding ? h('span', { class: 'k-pill' }, 'build tools only') : null,
+        x.url ? h('a', { href: x.url, target: '_blank', rel: 'noreferrer', class: 'small' }, 'Read') : null)),
+      h('div', { class: 'k-btns', style: { marginTop: '8px' } }, h('button', { class: 'primary', onclick: () => act(() => prism.call('askAgent', { text: `Fix these known security holes where a fix exists, most serious first, without taking major version jumps unless needed: ${v.list.map((x) => `${x.name} ${x.versions.join('/')} (${x.severity}, fixed in ${x.fixedIn}${x.onlyWhileBuilding ? ', build tools only' : ''})`).join('; ')}. Then run the checks and build, and tell me what is left and why.` }), 'Asked Prism') }, 'Ask Prism to fix them'))) : null
+  ]
+}
+
+// ---------------------------------------------------------------- licences
+
+const MEANING = {
+  strong: 'Shipping these can oblige you to share your whole program under the same licence.',
+  unknown: 'No licence was found in the package itself: look at each one’s page.',
+  weak: 'Usable; changes to their own files must be shared under the same licence.',
+  credit: 'Free to use, but their notice must be kept with what you ship.',
+  free: 'Free to use with no conditions.'
+}
+
+function licencesTab() {
+  const v = last('licences')
+  const groups = ['strong', 'unknown', 'weak']
+  return [
+    h('label', { class: 'k-check' }, h('input', { type: 'checkbox', checked: allLicences, onchange: (e) => { allLicences = e.target.checked; check('licences', { all: allLicences }) } }), 'Include tools used only while building'),
+    checkedLine('licences', 'Read the licences'),
+    ...(v?.notes ?? []).map((n) => h('div', { class: 'k-hint warn-text' }, n)),
+    v ? h('div', { class: 'k-grid' }, ['credit', 'weak', 'strong', 'unknown', 'free'].map((c) => h('div', { class: 'k-stat' }, h('b', { class: c === 'strong' && v.counts[c] ? 'bad' : (c === 'unknown' || c === 'weak') && v.counts[c] ? 'warn' : '' }, String(v.counts[c] ?? 0)), h('span', {}, { credit: 'keep their notice', weak: 'share their own changes', strong: 'share everything', unknown: 'unknown', free: 'no conditions' }[c])))) : null,
+    ...(v ? groups.filter((g) => v.counts[g]).map((g) => h('div', { class: 'k-card' },
+      h('h3', {}, { strong: 'Share-alike for the whole program', unknown: 'No licence found', weak: 'Share-alike for their own files' }[g]),
+      h('div', { class: 'k-hint' }, MEANING[g]),
+      v.packages.filter((p) => p.class === g).map((p) => h('div', { class: 'row' }, h('div', { class: 'k-grow' }, h('span', {}, `${p.name} ${p.version}`), h('span', { class: 'k-hint' }, p.licence)), p.homepage ? h('a', { href: p.homepage, target: '_blank', rel: 'noreferrer' }, 'Page') : null)))) : []),
+    creditsCard(),
+    v ? h('details', { class: 'k-more' }, h('summary', {}, `All ${v.packages.length} packages`),
+      h('div', { class: 'k-scroll-x' }, h('table', { class: 'k-table' }, h('tr', {}, h('th', {}, 'Package'), h('th', {}, 'Version'), h('th', {}, 'Licence')), v.packages.map((p) => h('tr', {}, h('td', {}, p.name), h('td', {}, p.version), h('td', {}, p.licence)))))) : null
+  ]
+}
+
+function creditsCard() {
+  const f = { what: '', from: '', licence: '', url: '' }
+  const input = (k, ph) => h('input', { placeholder: ph, oninput: (e) => { f[k] = e.target.value } })
+  return h('div', { class: 'k-card k-col' },
+    h('h3', {}, 'Other credits'),
+    h('div', { class: 'k-hint' }, 'Things that are not code packages but still need crediting: map data, fonts, pictures, sounds, 3D models.'),
+    o.credits.length ? o.credits.map((c, i) => h('div', { class: 'row' }, h('div', { class: 'k-grow' }, h('span', {}, `${c.what}: ${c.from}`), h('span', { class: 'k-hint' }, [c.licence, c.url].filter(Boolean).join(' · '))), h('button', { class: 'ghost small', title: 'Remove', onclick: () => act(async () => { o.credits = await prism.call('removeCredit', { index: i }); render() }) }, '✕'))) : null,
+    h('div', { class: 'credit-form' }, input('what', 'What, like Map data'), input('from', 'From, like OpenStreetMap contributors'), input('licence', 'Licence, like ODbL 1.0'), input('url', 'Address (optional)')),
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'small', onclick: () => { if (!f.what || !f.from) return toast('Say what it is and who it is from'); act(async () => { o.credits = await prism.call('addCredit', f); render() }, 'Added') } }, 'Add the credit'),
+      h('button', { class: 'primary small', onclick: () => act(async () => { const r = await prism.call('notices'); await prism.call('openFile', { path: r.path }) }, 'Written') }, 'Write THIRD-PARTY-NOTICES.md')))
+}
+
+// ---------------------------------------------------------------- secrets
+
+function secretsTab() {
+  const v = last('secrets')
+  return [
+    h('div', { class: 'k-card k-col' }, h('h3', {}, o.guard.on ? 'Every commit is checked' : 'Commits are not checked yet'), guardButton()),
+    checkedLine('secrets', 'Look at what is not yet committed'),
+    ...(v?.notes ?? []).map((n) => h('div', { class: 'k-hint warn-text' }, n)),
+    v && !v.list.length ? h('div', { class: 'k-empty' }, h('span', { class: 'ok-text' }, 'Nothing that looks like a secret.')) : null,
+    v?.list.length ? h('div', { class: 'k-card' },
+      v.list.map((f) => h('div', { class: 'row' },
+        h('div', { class: 'k-grow' },
+          h('span', {}, `${f.what}${f.weak ? ' (maybe)' : ''}`),
+          h('span', { class: 'k-hint k-trunc' }, `${f.file}${f.line ? `, line ${f.line}` : ''}`),
+          f.rule !== 'file' ? h('span', { class: 'preview' }, f.preview) : null),
+        h('div', { class: 'k-btns' },
+          h('button', { class: 'small', onclick: () => act(() => prism.call('openFile', { path: f.file })) }, 'Open'),
+          f.rule === 'file'
+            ? h('button', { class: 'small', onclick: () => act(async () => { await prism.call('ignore', { file: f.file }); await check('secrets') }, 'Git will ignore it') }, 'Keep it out of git')
+            : h('button', { class: 'small', onclick: async () => (await ask(`Let this through for good? It will not be flagged again in this project.\n\n${f.file}${f.line ? `:${f.line}` : ''}\n${f.preview}`, 'It is not a secret')) && act(async () => { await prism.call('allow', { key: f.key }); await check('secrets') }) }, 'Not a secret'))))) : null
+  ]
+}
+
+$('all').onclick = async () => {
+  for (const k of ['updates', 'holes', 'licences', 'secrets']) busy = [...new Set([...busy, k])]
+  render()
+  await Promise.all(['updates', 'holes', 'licences', 'secrets'].map((k) => prism.call(k, k === 'licences' ? { all: allLicences } : {}).catch((e) => toast(String(e.message ?? e)))))
+  await load()
+}
+prism.on('busy', (b) => { busy = b; if (o) render() })
+prism.on('result', ({ key, value }) => { if (o) { o.last = { ...o.last, [key]: value }; render() } })
+prism.on('credits', (c) => { if (o) { o.credits = c; render() } })
+prism.ready(() => void load().catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e)))))
+</script>
+</body>
+</html>

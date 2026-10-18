@@ -1,0 +1,145 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .form { display: grid; grid-template-columns: minmax(160px, 3fr) minmax(100px, 1fr) auto auto; gap: 6px; align-items: center; }
+  @media (max-width: 560px) { .form { grid-template-columns: 1fr 1fr; } .form input.cmd { grid-column: 1 / -1; } }
+  .series { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); flex-wrap: wrap; min-width: 0; }
+  .series:last-child { border-bottom: 0; }
+  .series .k-grow { display: flex; flex-direction: column; min-width: 0; }
+  svg.spark { flex: none; }
+  .big { font-size: 16px; font-weight: 600; white-space: nowrap; }
+  .faster { color: var(--mint, #7ee2b8); } .slower { color: var(--rose, #f59ab0); }
+  .flame { position: relative; overflow: hidden; border-radius: 8px; background: rgba(0,0,0,.2); }
+  .bar { position: absolute; height: 18px; font-size: 11px; line-height: 18px; padding: 0 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-radius: 3px; color: #111; cursor: default; box-shadow: inset 0 0 0 1px rgba(0,0,0,.25); }
+  .k-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="k-app">
+  <div class="k-top"><span class="k-title">Profiling</span><span class="k-hint" id="progress"></span></div>
+  <div class="k-body" id="body"><div class="k-empty">Reading earlier measurements…</div></div>
+</div>
+<script>
+const { h, mount, ago, toast, act } = kit
+let o = null
+let picked = null
+let entry = null
+const form = { command: '', name: '', mode: 'time', runs: 5 }
+const $ = (id) => document.getElementById(id)
+
+async function load() {
+  o = await prism.call('overview')
+  render()
+}
+
+function render() {
+  if (!o.project) return mount('#body', h('div', { class: 'k-empty' }, 'Open a project to measure things in it.'))
+  const times = o.history.filter((x) => x.kind === 'time')
+  const profiles = o.history.filter((x) => x.kind !== 'time')
+  mount('#body', runCard(), timesCard(times), profilesCard(profiles), entry ? profileView(entry) : null)
+}
+
+function runCard() {
+  return h('div', { class: 'k-card k-col' },
+    h('div', { class: 'form' },
+      h('input', { class: 'cmd k-mono', placeholder: 'A command, like npm run build or node script.js', value: form.command, oninput: (e) => (form.command = e.target.value) }),
+      h('input', { placeholder: 'Name (optional)', value: form.name, oninput: (e) => (form.name = e.target.value) }),
+      h('select', { onchange: (e) => { form.mode = e.target.value; render() } }, [['time', 'Time it'], ['node', 'Where the time goes (Node)'], ['python', 'Where the time goes (Python)']].map(([v, l]) => h('option', { value: v, selected: form.mode === v }, l))),
+      h('button', { class: 'primary', disabled: o.running, onclick: go }, o.running ? 'Measuring…' : 'Measure')),
+    form.mode === 'time' ? h('div', { class: 'k-row' }, h('span', { class: 'k-hint' }, 'Runs'), h('input', { type: 'number', min: 1, max: 50, value: form.runs, style: { width: '70px' }, oninput: (e) => (form.runs = Number(e.target.value)) }), h('span', { class: 'k-hint' }, 'after one warm-up run, kept with the commit it was measured at.')) : h('div', { class: 'k-hint' }, 'Runs the program once under its own profiler, then shows which functions took the time.'),
+    o.running ? h('div', {}, h('button', { class: 'danger small', onclick: () => act(() => prism.call('stop')) }, 'Stop')) : null)
+}
+
+async function go() {
+  if (!form.command.trim()) return toast('What should be measured?')
+  o.running = true
+  render()
+  try {
+    if (form.mode === 'time') {
+      const r = await prism.call('time', { command: form.command, name: form.name, runs: form.runs })
+      toast(`Median ${Math.round(r.median)} ms`)
+    } else {
+      const r = await prism.call('profile', { command: form.command, name: form.name, kind: form.mode })
+      entry = r
+    }
+  } catch (e) {
+    toast(String(e.message ?? e).split('\n')[0])
+  } finally {
+    await load()
+  }
+}
+
+function spark(values) {
+  const w = 140, hgt = 34
+  if (values.length < 2) return h('span', { class: 'k-hint' }, 'one run so far')
+  const max = Math.max(...values), min = Math.min(...values)
+  const pts = values.map((v, i) => `${(i / (values.length - 1)) * (w - 6) + 3},${hgt - 3 - ((v - min) / (max - min || 1)) * (hgt - 6)}`).join(' ')
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('class', 'spark'); svg.setAttribute('width', w); svg.setAttribute('height', hgt)
+  svg.innerHTML = `<polyline points="${pts}" fill="none" stroke="var(--accent, #8ad8ff)" stroke-width="1.6" stroke-linejoin="round"/>` + values.map((v, i) => i === values.length - 1 ? `<circle cx="${(i / (values.length - 1)) * (w - 6) + 3}" cy="${hgt - 3 - ((v - min) / (max - min || 1)) * (hgt - 6)}" r="2.6" fill="var(--accent, #8ad8ff)"/>` : '').join('')
+  return svg
+}
+
+function timesCard(times) {
+  if (!times.length) return null
+  const names = [...new Set(times.map((t) => t.name))]
+  return h('div', { class: 'k-card' }, h('h3', {}, 'Timings over time'),
+    names.map((n) => {
+      const list = times.filter((t) => t.name === n)
+      const last = list[0], prev = list[1]
+      const change = prev ? (last.median - prev.median) / prev.median : null
+      return h('div', { class: 'series' },
+        h('div', { class: 'k-grow' }, h('span', { class: 'k-trunc' }, n), h('span', { class: 'k-hint' }, `${list.length} measurement${list.length === 1 ? '' : 's'} · last ${ago(last.at)}${last.commit ? ` at ${last.commit}` : ''}`)),
+        spark(list.map((t) => t.median).reverse()),
+        h('div', { style: { textAlign: 'right' } }, h('div', { class: 'big' }, `${Math.round(last.median)} ms`), change != null && Math.abs(change) >= 0.01 ? h('div', { class: change < 0 ? 'faster' : 'slower', style: { fontSize: '12px' } }, `${Math.abs(change * 100).toFixed(0)}% ${change < 0 ? 'faster' : 'slower'}`) : h('div', { class: 'k-hint' }, prev ? 'about the same' : '')),
+        h('button', { class: 'small ghost', title: 'Measure it again', onclick: () => { form.command = last.command; form.name = n; form.mode = 'time'; go() } }, 'Again'))
+    }))
+}
+
+function profilesCard(profiles) {
+  if (!profiles.length) return null
+  return h('div', { class: 'k-card' }, h('h3', {}, 'Where the time went'),
+    h('div', { class: 'k-list' }, profiles.slice(0, 12).map((p) => h('div', { class: 'k-item click' + (picked === p.id ? ' on' : ''), onclick: () => act(async () => { picked = p.id; entry = await prism.call('entry', { id: p.id }); render() }) },
+      h('span', { class: 'k-pill' }, p.kind === 'node' ? 'Node' : 'Python'), h('span', { class: 'k-grow k-trunc' }, p.name), h('span', { class: 'k-hint' }, `${Math.round(p.ms)} ms · ${ago(p.at)}`)))))
+}
+
+const COLOURS = ['#f5c97a', '#f59ab0', '#8ad8ff', '#7ee2b8', '#c9a7f5', '#f5a97a']
+function colourFor(name) { let x = 0; for (const c of name) x = (x * 31 + c.charCodeAt(0)) >>> 0; return COLOURS[x % COLOURS.length] }
+
+function profileView(e) {
+  const rows = []
+  if (e.tree) {
+    const box = h('div', { class: 'flame' })
+    let depthMax = 0
+    const place = (n, left, width, depth) => {
+      if (width < 0.004 || depth > 40) return
+      depthMax = Math.max(depthMax, depth)
+      box.appendChild(h('div', { class: 'bar', title: `${n.name}${n.where ? ` (${n.where})` : ''}\n${n.total.toFixed(1)} ms in all, ${n.self.toFixed(1)} ms itself`, style: { left: `${left * 100}%`, width: `calc(${width * 100}% - 1px)`, top: `${depth * 19}px`, background: colourFor(n.where || n.name) } }, width > 0.03 ? n.name : ''))
+      let x = left
+      for (const c of n.children) { const w = (c.total / e.tree.total) * 1; place(c, x, w, depth + 1); x += w }
+    }
+    place(e.tree, 0, 1, 0)
+    box.style.height = `${(depthMax + 1) * 19 + 2}px`
+    rows.push(h('div', { class: 'k-hint' }, 'Each bar is a function; what it calls sits under it, and the wider it is, the longer it took. Hover for the times.'), box)
+  }
+  return h('div', { class: 'k-card k-col' },
+    h('div', { class: 'k-row' }, h('b', { class: 'k-grow k-trunc' }, e.name), h('span', { class: 'k-hint' }, `${Math.round(e.ms)} ms${e.commit ? ` at ${e.commit}` : ''}`),
+      h('button', { class: 'small', onclick: () => act(() => prism.call('askAgent', { text: `The profile of "${e.name}" (${e.command}) says the time goes here:\n${e.top.slice(0, 12).map((x) => `- ${x.fn}${x.where ? ` (${x.where})` : ''}: ${x.self.toFixed(1)} ms`).join('\n')}\n\nLook at the code behind the biggest of these and tell me what makes it slow and what would help. Change nothing yet; measure again with profile_time after any change.` }), 'Asked Prism') }, 'Ask Prism why')),
+    ...rows,
+    h('div', { class: 'k-scroll-x' }, h('table', { class: 'k-table' },
+      h('tr', {}, h('th', {}, 'Function'), h('th', {}, 'Where'), h('th', {}, 'Own time'), h('th', {}, 'Share')),
+      e.top.slice(0, 20).map((x) => h('tr', {}, h('td', {}, x.fn), h('td', { class: 'k-hint' }, x.where), h('td', { class: 'num' }, `${x.self.toFixed(1)} ms`), h('td', { class: 'num' }, e.total ? `${((x.self / e.total) * 100).toFixed(1)}%` : ''))))))
+}
+
+prism.on('progress', (p) => { $('progress').textContent = p ? `${p.label}: ${p.step}` : '' })
+prism.on('changed', () => load())
+prism.ready(() => void load().catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e)))))
+</script>
+</body>
+</html>

@@ -1,0 +1,204 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  .tile { border: 1px solid rgba(255,255,255,.08); border-radius: 10px; overflow: hidden; background: rgba(255,255,255,.02); display: flex; flex-direction: column; min-width: 0; cursor: pointer; }
+  .tile:hover { border-color: rgba(255,255,255,.18); }
+  .tile.on { border-color: var(--accent, #8ad8ff); }
+  .tile .pic { height: 140px; display: flex; align-items: center; justify-content: center; background: repeating-conic-gradient(rgba(255,255,255,.035) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+  .tile .pic img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+  .tile .note-text { padding: 10px 12px; font-size: 12.5px; white-space: pre-wrap; max-height: 140px; overflow: hidden; }
+  .tile .meta { padding: 6px 10px 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .tile .meta .k-row { flex-wrap: nowrap; }
+  .tile .title { font-size: 12.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .drop { position: fixed; inset: 0; border: 2px dashed var(--accent, #8ad8ff); background: color-mix(in srgb, var(--accent, #8ad8ff) 8%, transparent); display: none; align-items: center; justify-content: center; font-size: 15px; z-index: 40; pointer-events: none; }
+  body.dragging .drop { display: flex; }
+  .compare { display: flex; flex-direction: column; gap: 10px; }
+  .sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+  .side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .side .frame, .stack { background: repeating-conic-gradient(rgba(255,255,255,.035) 0 25%, transparent 0 50%) 0 0 / 16px 16px; border-radius: 10px; border: 1px solid rgba(255,255,255,.08); display: flex; align-items: center; justify-content: center; min-height: 120px; overflow: hidden; }
+  .side img { max-width: 100%; max-height: 62vh; object-fit: contain; display: block; }
+  /* the second picture is stretched over the first's own box, so the same screen at two sizes lines up */
+  .stack .inner { position: relative; display: inline-block; isolation: isolate; line-height: 0; }
+  .stack .inner img { max-width: 100%; max-height: 62vh; display: block; }
+  .stack .inner img.top { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; object-fit: fill; }
+  .stack.diff .inner img.top { mix-blend-mode: difference; }
+  .who { font-size: 11px; }
+  .k-pill.you { color: var(--mint, #7ee2b8); border-color: color-mix(in srgb, var(--mint, #7ee2b8) 40%, transparent); }
+  textarea.note { width: 100%; min-height: 70px; }
+</style>
+</head>
+<body>
+<div class="drop">Drop pictures to put them on the board</div>
+<div class="k-app">
+  <div class="k-top">
+    <span class="k-title">Design board</span>
+    <label class="k-btns"><button class="small" id="addPic">Add a picture</button><input type="file" id="file" accept="image/*" multiple hidden></label>
+    <button class="small" id="addNote">Add a note</button>
+  </div>
+  <div class="k-body" id="body"><div class="k-empty">Opening the board…</div></div>
+</div>
+<script>
+const { h, mount, ago, toast, act, ask } = kit
+let b = null
+let focus = null
+let mode = 'side'
+let blend = 50
+let noting = false
+const pics = new Map()
+const $ = (id) => document.getElementById(id)
+
+async function load() {
+  b = await prism.call('board')
+  render()
+}
+
+async function pic(id) {
+  if (pics.has(id)) return pics.get(id)
+  const p = await prism.call('picture', { id }).catch(() => null)
+  const url = p ? `data:${p.mime};base64,${p.base64}` : ''
+  pics.set(id, url)
+  return url
+}
+
+function imgFor(id, cls) {
+  const img = h('img', { class: cls ?? '', alt: '' })
+  pic(id).then((u) => { if (u) img.src = u })
+  return img
+}
+
+const byId = (id) => b.items.find((x) => x.id === id)
+
+function render() {
+  if (b.noProject) return mount('#body', h('div', { class: 'k-empty' }, 'Open a project to use its design board.'))
+  const f = focus && byId(focus)
+  mount('#body',
+    noting ? noteForm() : null,
+    f ? compare(f) : null,
+    b.items.length ? h('div', { class: 'grid' }, b.items.map(tile)) : h('div', { class: 'k-empty' },
+      h('div', {}, 'Put sketches, screenshots and things you like here.'),
+      h('div', { class: 'k-hint' }, 'Drop or paste pictures anywhere in this panel. When Prism builds something from one, its version goes beside yours to compare.')))
+}
+
+function tile(it) {
+  const pair = it.pairWith ? byId(it.pairWith) : null
+  return h('div', { class: 'tile' + (focus === it.id ? ' on' : ''), onclick: () => { focus = focus === it.id ? null : it.id; render(); window.scrollTo(0, 0) } },
+    it.kind === 'note' ? h('div', { class: 'note-text' }, it.text || it.title) : h('div', { class: 'pic' }, imgFor(it.id)),
+    h('div', { class: 'meta' },
+      h('div', { class: 'k-row' }, h('span', { class: 'title', title: it.title }, it.title), h('span', { class: 'k-pill who ' + (it.by === 'you' ? 'you' : 'accent') }, it.by === 'you' ? 'yours' : 'Prism')),
+      h('span', { class: 'k-hint k-trunc' }, pair ? `beside “${pair.title}”` : it.kind === 'render' ? 'a version' : ago(it.at))))
+}
+
+function compare(it) {
+  const pair = it.pairWith ? byId(it.pairWith) : null
+  const ref = pair && it.by !== 'you' && pair.by === 'you' ? pair : it
+  const other = ref === it ? pair : it
+  const controls = h('div', { class: 'k-row' },
+    pair ? kit.tabs([['side', 'Side by side'], ['over', 'Over each other'], ['diff', 'Differences']], mode, (m) => { mode = m; render() }) : null,
+    pair && mode === 'over' ? h('input', { type: 'range', min: 0, max: 100, value: blend, title: 'How much of the second one shows', style: { flex: '1', minWidth: '100px' }, oninput: (e) => { blend = Number(e.target.value); const top = document.querySelector('.stack img.top'); if (top) top.style.opacity = String(blend / 100) } }) : null)
+  let view
+  if (!pair || mode === 'side') {
+    view = h('div', { class: 'sides' }, [ref, other].filter(Boolean).map((x) => h('div', { class: 'side' },
+      h('div', { class: 'k-row' }, h('b', { class: 'k-trunc k-grow' }, x.title), h('span', { class: 'k-pill who ' + (x.by === 'you' ? 'you' : 'accent') }, x.by === 'you' ? 'yours' : 'Prism’s')),
+      x.kind === 'note' ? h('div', { class: 'k-card', style: { whiteSpace: 'pre-wrap' } }, x.text) : h('div', { class: 'frame' }, imgFor(x.id)),
+      x.note ? h('div', { class: 'k-hint' }, x.note) : null)))
+  } else {
+    const top = imgFor(other.id, 'top')
+    if (mode === 'over') top.style.opacity = String(blend / 100)
+    view = h('div', { class: 'stack' + (mode === 'diff' ? ' diff' : '') }, h('div', { class: 'inner' }, imgFor(ref.id), top))
+  }
+  return h('div', { class: 'k-card compare' },
+    controls,
+    view,
+    mode === 'diff' && pair ? h('div', { class: 'k-hint' }, 'Where the two are the same it goes dark; whatever is lit up is different.') : null,
+    h('div', { class: 'k-btns' },
+      ref.kind !== 'render' && !pair ? h('button', { class: 'primary small', onclick: () => act(() => prism.call('askAgent', { text: `On the design board, "${ref.title}" (${ref.id}) is ${ref.kind === 'note' ? 'my note' : 'my reference'}. Look at it with board_look, build it, and put your version beside it with board_add pairWith="${ref.id}" so we can compare.` }), 'Asked Prism') }, 'Ask Prism to make this') : null,
+      pair ? h('button', { class: 'primary small', onclick: () => act(() => prism.call('askAgent', { text: `On the design board, compare my "${ref.title}" (${ref.id}) with your version "${other.title}" (${other.id}) using board_look. Make yours match mine more closely, then put the new version beside mine with board_add pairWith="${ref.id}".` }), 'Asked Prism') }, 'Ask Prism to match it more closely') : null,
+      h('button', { class: 'small', onclick: () => pairWith(it) }, pair ? 'Pair with another' : 'Put beside another'),
+      h('button', { class: 'small', onclick: () => rename(it) }, 'Rename'),
+      h('button', { class: 'small', onclick: () => noteOn(it) }, it.note ? 'Change the note' : 'Add a note'),
+      h('button', { class: 'small danger', onclick: async () => (await ask(`Take “${it.title}” off the board?`, 'Take it off')) && act(async () => { b = await prism.call('remove', { id: it.id }); focus = null; render() }) }, 'Take it off'),
+      h('button', { class: 'small ghost', onclick: () => { focus = null; render() } }, 'Close')))
+}
+
+async function pairWith(it) {
+  const others = b.items.filter((x) => x.id !== it.id)
+  if (!others.length) return toast('There is nothing else on the board yet.')
+  const pickBox = h('div', { class: 'k-modal-back', onclick: (e) => { if (e.target === pickBox) pickBox.remove() } },
+    h('div', { class: 'k-modal' },
+      h('div', {}, `Put “${it.title}” beside:`),
+      h('div', { class: 'k-list', style: { maxHeight: '50vh', overflow: 'auto' } }, others.map((x) => h('div', { class: 'k-item click', onclick: () => { pickBox.remove(); act(async () => { await prism.call('update', { id: it.id, patch: { pairWith: x.id } }); b = await prism.call('board'); render() }) } }, h('span', { class: 'k-grow k-trunc' }, x.title), h('span', { class: 'k-pill who ' + (x.by === 'you' ? 'you' : 'accent') }, x.by === 'you' ? 'yours' : 'Prism')))),
+      h('div', { class: 'k-btns' }, it.pairWith ? h('button', { onclick: () => { pickBox.remove(); act(async () => { await prism.call('update', { id: it.id, patch: { pairWith: null } }); b = await prism.call('board'); render() }) } }, 'Unpair') : null, h('button', { onclick: () => pickBox.remove() }, 'Cancel'))))
+  document.body.appendChild(pickBox)
+}
+
+function rename(it) {
+  const input = h('input', { value: it.title, style: { width: '100%' } })
+  const box = h('div', { class: 'k-modal-back' }, h('div', { class: 'k-modal' }, h('div', {}, 'Name'), input, h('div', { class: 'k-btns' }, h('button', { onclick: () => box.remove() }, 'Cancel'), h('button', { class: 'primary', onclick: () => { box.remove(); act(async () => { await prism.call('update', { id: it.id, patch: { title: input.value } }); b = await prism.call('board'); render() }) } }, 'Save'))))
+  document.body.appendChild(box)
+  input.focus()
+  input.select()
+}
+
+function noteOn(it) {
+  const ta = h('textarea', { class: 'note', value: it.note ?? '' })
+  const box = h('div', { class: 'k-modal-back' }, h('div', { class: 'k-modal' }, h('div', {}, `A note on “${it.title}”`), ta, h('div', { class: 'k-btns' }, h('button', { onclick: () => box.remove() }, 'Cancel'), h('button', { class: 'primary', onclick: () => { box.remove(); act(async () => { await prism.call('update', { id: it.id, patch: { note: ta.value } }); b = await prism.call('board'); render() }) } }, 'Save'))))
+  document.body.appendChild(box)
+  ta.focus()
+}
+
+function noteForm() {
+  let title = ''
+  let text = ''
+  return h('div', { class: 'k-card k-col' },
+    h('input', { placeholder: 'What it is about', oninput: (e) => (title = e.target.value) }),
+    h('textarea', { class: 'note', placeholder: 'The idea, in words: colours, feel, what it should do', oninput: (e) => (text = e.target.value) }),
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary small', onclick: () => act(async () => { await prism.call('addNote', { title: title || 'A note', text }); noting = false; await load() }) }, 'Put it on the board'),
+      h('button', { class: 'small ghost', onclick: () => { noting = false; render() } }, 'Cancel')))
+}
+
+function readFile(f) {
+  return new Promise((res, rej) => {
+    const r = new FileReader()
+    r.onload = () => res(String(r.result).split(',')[1])
+    r.onerror = () => rej(r.error)
+    r.readAsDataURL(f)
+  })
+}
+
+async function addFiles(files) {
+  const imgs = [...files].filter((f) => f.type.startsWith('image/'))
+  if (!imgs.length) return toast('Only pictures can go on the board.')
+  for (const f of imgs) {
+    const base64 = await readFile(f)
+    const it = await act(() => prism.call('addPicture', { name: f.name || 'pasted.png', mime: f.type, base64 }))
+    if (it) focus = it.id
+  }
+  await load()
+}
+
+$('addPic').onclick = () => $('file').click()
+$('file').onchange = (e) => { addFiles(e.target.files); e.target.value = '' }
+$('addNote').onclick = () => { noting = true; render() }
+let depth = 0
+document.addEventListener('dragenter', (e) => { e.preventDefault(); depth++; document.body.classList.add('dragging') })
+document.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) document.body.classList.remove('dragging') })
+document.addEventListener('dragover', (e) => e.preventDefault())
+document.addEventListener('drop', (e) => { e.preventDefault(); depth = 0; document.body.classList.remove('dragging'); if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files) })
+document.addEventListener('paste', (e) => {
+  const files = [...(e.clipboardData?.items ?? [])].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter(Boolean)
+  if (files.length && !(e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement)) { e.preventDefault(); addFiles(files) }
+})
+prism.on('board', (nb) => { b = nb; render() })
+prism.on('focus', ({ id }) => { focus = id; if (b) render() })
+prism.ready(() => void load().catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e)))))
+</script>
+</body>
+</html>

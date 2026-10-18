@@ -1,0 +1,101 @@
+/* A tab out on the desktop (shell/FloatShell.tsx): no frame, so the window is the
+   panel itself, with a strip to drag it by that appears under the pointer. */
+body.floating {
+  background: transparent;
+}
+
+.floater {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-1, #0f1219);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.floater-bar {
+  /* the window itself grows upwards by exactly this height while the strip is up
+     (main/float.ts), so the strip sits above the gadget and covers none of it */
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 0;
+  padding: 0 4px;
+  opacity: 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--bg-2, #161a25) 92%, transparent);
+  border-bottom: 1px solid transparent;
+  /* the height matches the window's own growth, which is instant: only the fade is
+     worth animating, or the gadget appears to slide while the window is already taller */
+  transition: opacity 0.12s ease;
+}
+
+.floater-bar.show {
+  height: 26px;
+  opacity: 1;
+  border-bottom-color: var(--line);
+}
+
+.floater-grip {
+  display: flex;
+  cursor: grab;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  color: var(--text-3, #6d7489);
+}
+
+.floater-title {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floater-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-3, #6d7489);
+  cursor: pointer;
+}
+
+.floater-btn:hover {
+  background: var(--bg-3, #1d2230);
+  color: var(--text, #e9ecf4);
+}
+
+.floater-btn.on {
+  color: var(--accent, #8ad8ff);
+}
+
+.floater-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.floater-body > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.floater-grip:active {
+  cursor: grabbing;
+}
+
+/* the strip stays put while a gadget is being dragged about */
+.floater-bar.show + .floater-body {
+  user-select: none;
+}

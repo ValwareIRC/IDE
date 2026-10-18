@@ -1,0 +1,193 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .cmds { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+  .cmds code { display: block; font-size: 11.5px; color: var(--text-2, #a7aec0); white-space: pre-wrap; word-break: break-all; }
+  .target-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+  .target-head b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hist { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,.04); flex-wrap: wrap; font-size: 12.5px; }
+  .hist:last-child { border-bottom: 0; }
+  textarea.json { width: 100%; min-height: 320px; font-size: 12px; }
+  #run:empty { display: none; }
+</style>
+</head>
+<body>
+<div class="k-app">
+  <div class="k-top">
+    <span class="k-title">Deploy</span>
+    <button class="ghost small" id="settingsBtn">Settings</button>
+  </div>
+  <div class="k-body" id="body"><div class="k-empty">Reading the deploy targets…</div></div>
+</div>
+<script>
+const { h, mount, ago, dur, toast, act, ask } = kit
+let o = null
+let view = 'desk'
+const openLogs = new Set()
+const $ = (id) => document.getElementById(id)
+
+async function load() {
+  o = await prism.call('overview')
+  render()
+}
+
+function render() {
+  $('settingsBtn').textContent = view === 'settings' ? 'Back' : 'Settings'
+  if (!o?.project) return mount('#body', h('div', { class: 'k-empty' }, 'Open a project to deploy it.'))
+  if (view === 'settings') return renderSettings()
+  mount('#body', pendingCard(), o.error ? h('div', { class: 'k-hint bad-text' }, o.error) : null, targets(), h('div', { id: 'run' }), historyCard())
+  renderRun()
+}
+
+function commandList(cmds) {
+  return h('ol', { class: 'cmds' }, cmds.map((c) => h('li', {}, c.name, h('code', {}, c.run))))
+}
+
+function pendingCard() {
+  const p = o.pending
+  if (!p) return null
+  return h('div', { class: 'k-ask' },
+    h('div', {}, h('b', {}, `${p.by === 'you' ? 'Confirm' : 'Prism asks'}: ${p.kind === 'rollback' ? 'put back the previous version of' : 'deploy'} ${p.target}${p.server ? ` on ${p.server}` : ''}?`)),
+    p.shared ? h('div', { class: 'warn-text' }, 'This server is shared with other things.') : null,
+    h('div', { class: 'k-hint' }, 'These will run, in order:'),
+    commandList(p.commands),
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary', onclick: () => act(() => prism.call('answer', { id: p.id, yes: true })) }, p.kind === 'rollback' ? 'Put it back' : 'Deploy'),
+      h('button', { onclick: () => act(() => prism.call('answer', { id: p.id, yes: false })) }, 'Not now')))
+}
+
+function targets() {
+  if (!o.targets.length) {
+    return h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'Nowhere to deploy yet'),
+      h('div', { class: 'k-hint' }, 'A target is a place this project goes: the steps that put it there, a check that it works, and the steps that put the old version back.'),
+      h('div', { class: 'k-btns' },
+        h('button', { class: 'primary', onclick: () => act(() => prism.call('askAgent'), 'Asked Prism to set it up') }, 'Ask Prism to set it up'),
+        h('button', { onclick: () => { view = 'settings'; render() } }, 'Write it myself')))
+  }
+  const busy = o.run?.status === 'running'
+  return o.targets.map((t) => {
+    const missing = Object.entries(t.secrets).filter(([, set]) => !set).map(([k]) => k)
+    const lh = t.lastHealth
+    const all = [...t.backup, ...t.steps]
+    return h('div', { class: 'k-card k-col' },
+      h('div', { class: 'target-head' },
+        h('span', { class: 'k-dot ' + (lh ? (lh.ok ? 'ok' : 'bad') : '') , title: lh ? lh.said : 'Not checked yet' }),
+        h('b', { class: 'k-grow' }, t.name),
+        t.server ? h('span', { class: 'k-pill' }, t.server) : null,
+        t.shared ? h('span', { class: 'k-pill warn' }, 'shared') : null),
+      t.note ? h('div', { class: 'k-hint' }, t.note) : null,
+      h('div', { class: 'k-hint' },
+        t.last ? `Last: ${t.last.status} ${ago(t.last.at)}${t.last.commit ? ` (${t.last.commit})` : ''}${t.last.by !== 'you' ? `, by ${t.last.by}` : ''}.` : 'Not deployed from here yet.',
+        lh ? ` Health ${ago(lh.at)}: ${lh.ok ? 'working' : 'not working'}.` : ''),
+      missing.length ? h('div', { class: 'warn-text k-hint' }, `Needs ${missing.join(', ')} set in Settings first.`) : null,
+      h('details', { class: 'k-more' }, h('summary', {}, `${all.length} step${all.length === 1 ? '' : 's'}, ${t.health ? 'a health check' : 'no health check'}, ${t.rollback.length ? 'a way back' : 'no way back'}`),
+        h('div', { class: 'k-col', style: { marginTop: '8px' } }, commandList(all), t.rollback.length ? h('div', {}, h('div', { class: 'k-hint' }, 'The way back:'), commandList(t.rollback)) : h('div', { class: 'warn-text k-hint' }, 'There is no way back set for this one.'))),
+      h('div', { class: 'k-btns' },
+        h('button', { class: 'primary', disabled: busy || missing.length > 0, onclick: () => deployIt(t) }, 'Deploy'),
+        h('button', { disabled: busy || missing.length > 0, onclick: () => check(t) }, 'Is it working?'),
+        t.rollback.length ? h('button', { disabled: busy || missing.length > 0, onclick: () => putBack(t) }, 'Put the old one back') : null))
+  })
+}
+
+async function deployIt(t) {
+  const lines = [...t.backup, ...t.steps].map((s, i) => `${i + 1}. ${s.name}`).join('\n')
+  const yes = await ask(`Deploy ${t.name}${t.server ? ` on ${t.server}` : ''}?${t.shared ? '\n\nThis server is shared with other things.' : ''}\n\n${lines}${t.health ? '\n\nThen it checks the deploy works' + (t.rollback.length ? ', and puts the old version back if not.' : '.') : ''}`, 'Deploy')
+  if (yes) act(() => prism.call('deploy', { target: t.name, confirmed: true }))
+}
+
+async function putBack(t) {
+  const yes = await ask(`Put the previous version of ${t.name} back${t.server ? ` on ${t.server}` : ''}?\n\n${t.rollback.map((s, i) => `${i + 1}. ${s.name}`).join('\n')}`, 'Put it back')
+  if (yes) act(() => prism.call('rollBack', { target: t.name, confirmed: true }))
+}
+
+async function check(t) {
+  toast('Checking…')
+  const r = await act(() => prism.call('check', { target: t.name }))
+  if (r) { toast(r.ok ? 'It is working' : 'It is not working'); load() }
+}
+
+function stepView(s, i) {
+  const cls = s.status === 'done' ? 'ok' : s.status === 'failed' ? 'bad' : s.status === 'running' ? 'run' : ''
+  const open = openLogs.has(i) || s.status === 'failed'
+  return h('div', { class: 'k-step' + (s.status === 'running' ? ' on' : '') },
+    h('span', { class: 'k-num ' + cls }, s.status === 'done' ? '✓' : s.status === 'failed' ? '!' : String(i + 1)),
+    h('div', { class: 'k-grow' },
+      h('div', { class: 'k-trunc' }, s.stage === 'rollback' ? `Way back: ${s.name}` : s.name),
+      s.note ? h('div', { class: (s.status === 'failed' ? 'bad-text ' : '') + 'k-hint' }, s.note) : null),
+    h('span', { class: 'k-hint' }, s.status === 'skipped' ? 'skipped' : s.startedAt ? dur((s.endedAt ?? Date.now()) - s.startedAt) : ''),
+    s.log.length ? h('button', { class: 'ghost small', onclick: () => { open ? openLogs.delete(i) : openLogs.add(i); renderRun() } }, open ? 'Hide' : 'Output') : null,
+    open && s.log.length ? h('pre', { class: 'k-log', style: { flexBasis: '100%' } }, s.log.join('\n')) : null)
+}
+
+function renderRun() {
+  const el = $('run')
+  if (!el) return
+  const r = o.run
+  if (!r) return mount(el)
+  const head = { running: `Deploying ${r.target}…`, deployed: `${r.target} is deployed and working`, 'rolled back': r.manual ? `${r.target}: the previous version is back` : `${r.target} did not work, so the old version was put back`, broken: `${r.target} is not working and needs you`, failed: `Deploying ${r.target} failed before anything running was changed`, stopped: `Deploying ${r.target} was stopped` }[r.status] ?? r.status
+  const dot = r.status === 'deployed' || (r.status === 'rolled back' && r.manual) ? 'ok' : r.status === 'running' ? 'run' : r.status === 'broken' ? 'bad' : 'warn'
+  mount(el, h('div', { class: 'k-card k-col' },
+    h('div', { class: 'k-row' }, h('span', { class: 'k-dot ' + dot }), h('b', { class: 'k-grow' }, head),
+      r.status === 'running' ? h('button', { class: 'danger small', onclick: () => act(() => prism.call('stop')) }, 'Stop') : h('span', { class: 'k-hint' }, r.endedAt ? ago(r.endedAt) : '')),
+    h('div', { class: 'k-steps' }, r.steps.map(stepView))))
+}
+
+function historyCard() {
+  if (!o.history.length) return null
+  return h('div', { class: 'k-card' }, h('h3', {}, 'Earlier deploys'),
+    o.history.slice(0, 15).map((x) => h('div', { class: 'hist' },
+      h('span', { class: 'k-pill ' + (x.status === 'deployed' || x.status === 'put back' ? 'ok' : x.status === 'broken' ? 'bad' : 'warn') }, x.status),
+      h('span', { class: 'k-grow k-trunc' }, `${x.target}${x.commit ? ` · ${x.commit}` : ''}${x.by !== 'you' ? ` · by ${x.by}` : ''}`),
+      h('span', { class: 'k-hint' }, ago(x.at)))))
+}
+
+// ---------------------------------------------------------------- settings
+
+function renderSettings() {
+  let text = o.text
+  const ta = h('textarea', { class: 'json k-mono', spellcheck: 'false', value: text, oninput: (e) => { text = e.target.value } })
+  const names = [...new Set(o.targets.flatMap((t) => Object.keys(t.secrets)))]
+  mount('#body',
+    h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'Targets'),
+      h('div', { class: 'k-hint' }, 'Kept in the project as .prism/deploy.json. Steps run from the project folder. Write {secret:NAME} wherever a password or secret address goes, and set its value below: it is kept encrypted, never in the file.'),
+      ta,
+      h('div', { class: 'k-btns' },
+        h('button', { class: 'primary', onclick: async () => { const r = await act(() => prism.call('saveText', { text }), 'Saved'); if (r) { o = r; view = 'desk'; render() } } }, 'Save'),
+        !text.trim() ? h('button', { onclick: async () => { text = await prism.call('example'); ta.value = text } }, 'Start from an example') : null,
+        h('button', { class: 'ghost', onclick: () => act(() => prism.call('askAgent'), 'Asked Prism to set it up') }, 'Ask Prism to set it up'))),
+    names.length ? h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'Secrets'),
+      names.map((n) => {
+        const set = o.targets.some((t) => t.secrets[n])
+        let value = ''
+        return h('div', { class: 'k-row nowrap' },
+          h('span', { class: 'k-mono', style: { minWidth: '0', flex: '0 1 auto' } }, n),
+          h('span', { class: 'k-pill ' + (set ? 'ok' : 'warn') }, set ? 'set' : 'not set'),
+          h('input', { class: 'k-grow', type: 'password', placeholder: set ? 'Replace it' : 'Its value', oninput: (e) => { value = e.target.value } }),
+          h('button', { class: 'small', onclick: () => act(async () => { await prism.call('setSecret', { name: n, value }); await load(); view = 'settings'; render() }, 'Kept') }, 'Keep'))
+      })) : null)
+}
+
+$('settingsBtn').onclick = () => { view = view === 'settings' ? 'desk' : 'settings'; render() }
+prism.on('run', (r) => {
+  if (!o) return
+  const was = o.run?.status
+  o.run = r
+  if (r && r.status !== 'running' && was === 'running') return void load()
+  if (view === 'desk') (was !== 'running' && r?.status === 'running') ? render() : renderRun()
+})
+prism.on('pending', (p) => { if (o) { o.pending = p; if (view === 'desk') render() } })
+prism.on('health', () => load())
+prism.ready(() => void load().catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e)))))
+setInterval(() => { if (o?.run?.status === 'running' && view === 'desk') renderRun() }, 1000)
+</script>
+</body>
+</html>

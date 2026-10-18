@@ -1,0 +1,22 @@
+{
+  "id": "decisions",
+  "name": "Decisions",
+  "description": "Every question the agent asked you and what you answered, with the reasons when there were any: a record of what was decided in this project and why.",
+  "agent": "The decisions ledger (.prism/decisions.jsonl) keeps the user's answers to your questions. Answers picked from options are kept by themselves; when the user's message answers a question you asked in words, record it with decision_record (kind answered) before carrying on. Use decisions_look before asking something that may already be settled, and when reviewing work against what the user chose.",
+  "intro": {
+    "icon": "scale",
+    "colour": "#c9b8f5",
+    "tagline": "A record of what you decided, and why.",
+    "what": "Whenever the agent asks you something, by buttons or just in words, your answer is written down here with the question. So are the reasons, when there were some. Weeks later you can look back at why things are the way they are, and any agent checking the work can see what you actually asked for.",
+    "helps": [
+      "No more \"wait, did I say yes to that?\": it's all here, newest first.",
+      "Search it, add a reason you forgot to give, or cross out an answer you've changed your mind about.",
+      "Agents read it too, so they stop asking what you already settled."
+    ],
+    "example": "A month from now you wonder why the phone app has no dark mode. You search \"dark\" and find it: you said \"not yet, the light one first\" on the 9th of October."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "workspace": "write"
+  }
+}

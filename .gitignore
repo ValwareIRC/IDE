@@ -1,0 +1,21 @@
+node_modules/
+out/
+dist/
+stage/
+stage-resources/
+*.tsbuildinfo
+*.log
+.DS_Store
+Thumbs.db
+.env
+.env.*
+
+mobile/www/
+
+relay/node_modules/
+
+# a demo plays in here; it is made and removed as it runs
+.prism/demo-stage/
+
+# each computer's own folders for the build scripts (scripts/apk.ps1, scripts/upgrade.ps1)
+scripts/local.ps1

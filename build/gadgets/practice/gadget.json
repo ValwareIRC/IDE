@@ -1,0 +1,23 @@
+{
+  "id": "practice",
+  "name": "Practice",
+  "description": "Keeping your own skills sharp: the Pre-mortem (your guess before a diagnosis, and how often you were right), Workshop pieces to do by hand, and your courses as lessons.",
+  "agent": "Keeping the user's own skills sharp. The Pre-mortem is {state:premortem|on}. When it is on: before you start diagnosing a real problem (a bug, a crash, something slow or broken; not a change the user simply asked for), ask the user one short question with a free answer: what do they think is wrong, and what would they try first? Then work. At the end, compare notes in two or three sentences, then record it with practice_record (kind premortem, with an area and a verdict). The Workshop and the user's courses are in the Practice panel; practice_status shows their record.",
+  "intro": {
+    "icon": "dumbbell",
+    "colour": "#f5b8e0",
+    "tagline": "Keeps your own programming skills sharp.",
+    "what": "When an AI does a lot of the work, your own skills can quietly fade. This has three parts. The Pre-mortem: before Prism fixes a real bug, it asks what you think is wrong, then tells you if you were right, and keeps score. The Workshop: small real pieces of work for you to do by hand. And your C and C++ courses, right here.",
+    "helps": [
+      "You keep making the real decisions, not just watching.",
+      "Your score shows where your instincts are strong and where they are slipping.",
+      "Your courses are one click away."
+    ],
+    "example": "The app crashes. Before Prism looks, it asks \"what do you think is wrong?\". You say \"the relay\". Afterwards it says: close, it was the timeout one layer under it."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "shell": true,
+    "network": true
+  }
+}

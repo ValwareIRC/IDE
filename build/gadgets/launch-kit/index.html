@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .count { font-size: 11.5px; color: var(--text-3, #6f7689); text-align: right; }
+  .count.over { color: var(--rose, #f59ab0); }
+  textarea.long { min-height: 160px; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .shot { border: 1px solid rgba(255,255,255,.08); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+  .shot .pic { height: 170px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.2); }
+  .shot img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .shot .meta { padding: 6px 8px; display: flex; gap: 4px; align-items: center; min-width: 0; }
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
+  .store { display: flex; gap: 8px; align-items: center; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="k-app">
+  <div class="k-top"><span class="k-title">Launch kit</span><span class="k-hint">Nothing here is put online.</span></div>
+  <div id="tabs"></div>
+  <div class="k-body" id="body"><div class="k-empty">Reading the launch folder…</div></div>
+</div>
+<script>
+const { h, mount, bytes, toast, act } = kit
+let o = null
+let tab = 'listing'
+let draft = null
+const shot = { url: '', path: '', size: 'phone', caption: '' }
+const pics = new Map()
+
+async function load() {
+  o = await prism.call('overview')
+  draft ??= { ...o.listing }
+  render()
+}
+
+function render() {
+  if (!o.project) return mount('#body', h('div', { class: 'k-empty' }, 'Open a project to make its launch kit.'))
+  mount('#tabs', kit.tabs([['listing', 'Store listing'], ['shots', 'Screenshots'], ['page', 'Web page'], ['video', 'Video']], tab, (t) => { tab = t; render() }))
+  mount('#body', { listing: listingTab, shots: shotsTab, page: pageTab, video: videoTab }[tab]())
+}
+
+function counted(key, label, limitKey, area) {
+  const limit = o.stores.play[limitKey]
+  const count = h('div', { class: 'count' })
+  const update = () => {
+    const n = (draft[key] ?? '').length
+    count.textContent = limit ? `${n} of ${limit} on Google Play` : `${n}`
+    count.className = 'count' + (limit && n > limit ? ' over' : '')
+  }
+  const input = area ? h('textarea', { class: area === 'long' ? 'long' : '', value: draft[key] ?? '', oninput: (e) => { draft[key] = e.target.value; update() } }) : h('input', { value: draft[key] ?? '', oninput: (e) => { draft[key] = e.target.value; update() } })
+  update()
+  return h('label', { class: 'k-field' }, h('span', {}, label), input, count)
+}
+
+function listingTab() {
+  return [
+    h('div', { class: 'k-card k-col' },
+      counted('name', 'Name', 'title'),
+      counted('short', 'In a sentence', 'short', 'short'),
+      counted('long', 'The full description (a blank line between paragraphs; lines starting with - make a list)', 'long', 'long'),
+      counted('whatsNew', 'What is new in this version', 'whatsNew', 'short'),
+      h('div', { class: 'form' },
+        h('label', { class: 'k-field' }, h('span', {}, 'Keywords'), h('input', { value: draft.keywords ?? '', oninput: (e) => (draft.keywords = e.target.value) })),
+        h('label', { class: 'k-field' }, h('span', {}, 'Website or store address'), h('input', { value: draft.website ?? '', oninput: (e) => (draft.website = e.target.value) })),
+        h('label', { class: 'k-field' }, h('span', {}, 'Contact email'), h('input', { value: draft.contact ?? '', oninput: (e) => (draft.contact = e.target.value) })),
+        h('label', { class: 'k-field' }, h('span', {}, 'Background colour'), h('input', { type: 'color', value: draft.colour || '#f6c7d4', oninput: (e) => (draft.colour = e.target.value) }))),
+      h('div', { class: 'k-btns' },
+        h('button', { class: 'primary', onclick: () => act(async () => { o = await prism.call('saveListing', { listing: draft }); render() }, 'Saved in launch/listing.json') }, 'Save'),
+        h('button', { class: 'ghost', onclick: () => act(() => prism.call('askAgent', { text: 'Write the store listing for this project with launch_listing: read what it is and does (README, the code, the release notes), then write a name, a one-sentence description, a full description in plain, warm words (what it does for the person, not how it is built), and what is new in this version. Keep within Google Play\u2019s limits. Show me the result.' }), 'Asked Prism') }, 'Ask Prism to write it'))),
+    h('div', { class: 'k-card' }, h('h3', {}, 'Fits the stores?'),
+      Object.values(o.checks).map((c) => h('div', { class: 'store' }, h('span', { class: 'k-dot ' + (c.over.length ? 'bad' : 'ok') }), h('b', {}, c.name), h('span', { class: 'k-hint' }, c.over.length ? `too long: ${c.over.join(', ')}` : 'fits'))))
+  ]
+}
+
+async function picture(name) {
+  if (pics.has(name)) return pics.get(name)
+  const p = await prism.call('picture', { name })
+  const url = p ? `data:${p.mime};base64,${p.base64}` : ''
+  pics.set(name, url)
+  return url
+}
+
+function shotsTab() {
+  return [
+    h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'Make a screenshot'),
+      h('div', { class: 'form' },
+        h('input', { class: 'k-mono', placeholder: 'A page: an address, or an HTML file here', value: shot.url, oninput: (e) => (shot.url = e.target.value) }),
+        h('input', { class: 'k-mono', placeholder: 'or a picture file', value: shot.path, oninput: (e) => (shot.path = e.target.value) }),
+        h('select', { onchange: (e) => (shot.size = e.target.value) }, Object.entries(o.sizes).map(([k, v]) => h('option', { value: k, selected: shot.size === k }, v))),
+        h('input', { placeholder: 'A caption over it (optional)', value: shot.caption, oninput: (e) => (shot.caption = e.target.value) })),
+      h('div', { class: 'k-btns' },
+        h('button', { class: 'primary', onclick: async (e) => { if (!shot.url && !shot.path) return toast('A page or a picture to start from'); e.target.disabled = true; e.target.textContent = 'Drawing it…'; await act(() => prism.call('shoot', shot), 'Made'); pics.clear(); await load() } }, 'Make it'),
+        h('button', { class: 'ghost', onclick: () => act(() => prism.call('askAgent', { text: 'Make the store screenshots for this project with launch_screenshot: the screens that show best what it does, each at the phone size (and desktop if it runs there), each with a short caption in plain words. Then the feature graphic. Show me them.' }), 'Asked Prism') }, 'Ask Prism to make a set'))),
+    o.shots.length ? h('div', { class: 'shots' }, o.shots.map((s) => {
+      const img = h('img', { alt: s.name })
+      picture(s.name).then((u) => (img.src = u))
+      return h('div', { class: 'shot' }, h('div', { class: 'pic' }, img), h('div', { class: 'meta' }, h('span', { class: 'k-trunc k-grow k-hint', title: s.name }, s.name), h('button', { class: 'ghost small', title: 'Give it to me', onclick: () => act(() => prism.call('attach', { path: s.path, note: 'Store screenshot' }), 'Handed over') }, '↓'), h('button', { class: 'ghost small', title: 'Delete', onclick: () => act(async () => { o = await prism.call('removeShot', { name: s.name }); render() }) }, '✕')))
+    })) : h('div', { class: 'k-hint' }, 'Screenshots are kept in launch/screenshots.')
+  ]
+}
+
+function pageTab() {
+  return h('div', { class: 'k-card k-col' },
+    h('h3', {}, 'A web page for it'),
+    h('div', { class: 'k-hint' }, 'One page from the listing and the screenshots, in launch/site/index.html. It stays on this computer until you choose to put it somewhere.'),
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary', onclick: () => act(async () => { const p = await prism.call('site'); await prism.call('preview', { path: p }); await load() }, 'Written') }, o.site ? 'Write it again' : 'Write it'),
+      o.site ? h('button', { onclick: () => act(() => prism.call('preview', { path: o.site })) }, 'Open it') : null,
+      o.site ? h('button', { class: 'ghost', onclick: () => act(() => prism.call('askAgent', { text: `Polish the launch page at ${o.site}: make it beautiful in a warm cream-and-pastel look, check it with browser_open and check_accessibility, and fix what that finds. Do not put it online.` }), 'Asked Prism') }, 'Ask Prism to polish it') : null))
+}
+
+function videoTab() {
+  return h('div', { class: 'k-card k-col' },
+    h('h3', {}, 'A release video'),
+    h('div', { class: 'k-hint' }, 'A short film of what is new, with words on screen as well as spoken, saved in launch/video.'),
+    o.videos.length ? o.videos.map((v) => h('div', { class: 'k-row' }, h('span', { class: 'k-grow k-trunc' }, v.name), h('span', { class: 'k-hint' }, bytes(v.size)), h('button', { class: 'small', onclick: () => act(() => prism.call('attach', { path: v.path, note: 'Release video' }), 'Handed over') }, 'Give it to me'))) : null,
+    h('div', { class: 'k-btns' }, h('button', { class: 'primary', onclick: () => act(() => prism.call('askAgent', { text: `Make a short release video for this project, about what is new (${(o.listing.whatsNew || 'see the latest release notes').slice(0, 300)}): film the real thing working, with captions on screen for everything that is said. If the project already has a way of making videos, use it; otherwise build the smallest pipeline that does it. Save it in launch/video and hand it to me with attach_file.` }), 'Asked Prism') }, 'Ask Prism to make one')))
+}
+
+prism.on('changed', () => { pics.clear(); load() })
+prism.ready(() => void load().catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e)))))
+</script>
+</body>
+</html>

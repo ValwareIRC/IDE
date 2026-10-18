@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android's own refresh is left off (updatePeriodMillis 0): the picture is taken by a
+  job that can be given a sensible interval and can also be asked for on the spot,
+  which Android's alarm cannot.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="70dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/prism_widget"
+    android:configure="dev.valware.prism.WidgetPickActivity"
+    android:description="@string/widget_description" />

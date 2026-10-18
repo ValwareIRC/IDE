@@ -1,0 +1,11 @@
+/* Fonts that come with Prism and are not on npm as @fontsource packages. */
+
+/* Fixedsys Excelsior 3.00 by Darien Valentine, public domain: the old Windows system font, redrawn with wide Unicode coverage.
+   A pixel font: sharpest at 16px (or 32px). */
+@font-face {
+  font-family: 'Fixedsys Excelsior';
+  src: url('../assets/fonts/fixedsys-excelsior.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}

@@ -1,0 +1,285 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .choices { display: flex; flex-wrap: wrap; gap: 6px; }
+  .choice { display: flex; flex-direction: column; align-items: flex-start; gap: 0; text-align: left; padding: 6px 10px; min-width: 0; }
+  .choice b { font-weight: 600; }
+  .choice span { font-size: 11.5px; color: var(--text-2, #a7aec0); }
+  body.prism-themed .choice.on { border-color: var(--accent, #8ad8ff); background: color-mix(in srgb, var(--accent, #8ad8ff) 12%, transparent); }
+  .commit { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; min-width: 0; }
+  .commit .k-trunc { flex: 1; }
+  .commit .when { font-size: 11px; color: var(--text-3, #6f7689); flex: none; }
+  .art { display: flex; align-items: center; gap: 8px; padding: 6px 0; flex-wrap: wrap; min-width: 0; }
+  .art .k-grow { display: flex; flex-direction: column; min-width: 0; }
+  .ed-step { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(120px, 2fr) auto; gap: 6px; align-items: center; }
+  @media (max-width: 420px) { .ed-step { grid-template-columns: 1fr auto; } .ed-step input:nth-child(2) { grid-column: 1 / -1; grid-row: 2; } }
+  label.k-check { display: flex; gap: 8px; align-items: center; font-size: 12.5px; cursor: pointer; }
+  .hist { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.04); flex-wrap: wrap; min-width: 0; }
+  .hist:last-child { border-bottom: 0; }
+  #steps:empty { display: none; }
+</style>
+</head>
+<body>
+<div class="k-app">
+  <div class="k-top">
+    <span class="k-title" id="title">Release desk</span>
+    <span class="k-pill accent" id="version" hidden></span>
+    <button class="ghost small" id="settingsBtn" title="How this project is released">Settings</button>
+  </div>
+  <div class="k-body" id="body"><div class="k-empty">Looking at the project…</div></div>
+</div>
+<script>
+const { h, mount, bytes, ago, dur, toast, act, ask } = kit
+let o = null
+let view = 'desk'
+let choice = 'patch'
+let custom = ''
+let notes = null
+let notesEdited = false
+let alsoDeliver = false
+let alsoInstall = false
+const openLogs = new Set()
+let draft = null
+
+const $ = (id) => document.getElementById(id)
+
+async function load() {
+  o = await prism.call('overview')
+  if (!notesEdited) notes = (o.changes?.list ?? []).map((c) => c.subject).join('\n')
+  render()
+}
+
+function render() {
+  $('title').textContent = o?.project ? `Release desk · ${o.project}` : 'Release desk'
+  $('version').hidden = !o?.version
+  $('version').textContent = o?.version ?? ''
+  $('settingsBtn').textContent = view === 'settings' ? 'Back' : 'Settings'
+  if (!o?.project) return mount('#body', h('div', { class: 'k-empty' }, 'Open a project to release it.'))
+  if (view === 'settings') return renderSettings()
+  mount('#body', intro(), whatsNew(), releaseCard(), h('div', { id: 'steps' }), extras(), earlier())
+  renderSteps()
+}
+
+function intro() {
+  if (!o.config.guessed) return null
+  return h('div', { class: 'k-ask' },
+    h('div', {}, h('b', {}, 'This project has no release settings yet. '), o.config.notes.length ? `My guess: it ${o.config.notes.join(', and ')}.` : 'I could not guess how it is built.'),
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary', onclick: () => act(() => prism.call('askAgent'), 'Asked Prism to set it up') }, 'Ask Prism to set it up'),
+      h('button', { onclick: () => { view = 'settings'; render() } }, 'Set it up myself')))
+}
+
+function whatsNew() {
+  const c = o.changes
+  if (!c.git) return h('div', { class: 'k-card' }, h('h3', {}, 'What is new'), h('div', { class: 'k-hint' }, 'This project is not in git, so there is no list of changes.'))
+  const list = c.list
+  return h('div', { class: 'k-card' },
+    h('h3', {}, list.length ? `${list.length} change${list.length === 1 ? '' : 's'} since ${c.since ?? 'the start'}` : `Nothing new since ${c.since ?? 'the last release'}`),
+    list.length ? h('div', { class: 'k-list' }, list.slice(0, 12).map((x) => h('div', { class: 'commit' }, h('span', { class: 'k-trunc', title: x.subject }, x.subject), h('span', { class: 'when' }, ago(x.at))))) : h('div', { class: 'k-hint' }, c.sinceAt ? `Released ${ago(c.sinceAt)}.` : ''),
+    list.length > 12 ? h('div', { class: 'k-hint' }, `and ${list.length - 12} more`) : null)
+}
+
+function chosenVersion() {
+  if (choice === 'none') return o.version
+  if (choice === 'custom') return custom.trim()
+  return o.next?.[choice] ?? ''
+}
+
+function releaseCard() {
+  const busy = o.run?.status === 'running'
+  const opt = (id, label, sub) => h('button', { class: 'choice' + (choice === id ? ' on' : ''), onclick: () => { choice = id; render() } }, h('b', {}, label), h('span', {}, sub))
+  const cfg = o.config
+  const v = chosenVersion()
+  return h('div', { class: 'k-card k-col' },
+    h('h3', {}, 'New release'),
+    h('div', { class: 'choices' },
+      o.next ? [opt('patch', o.next.patch, 'fixes and small things'), opt('minor', o.next.minor, 'something new'), opt('major', o.next.major, 'a big change')] : null,
+      opt('custom', 'Another number', 'type it'),
+      opt('none', 'Same number', 'build it again')),
+    choice === 'custom' ? h('input', { placeholder: 'like 2.0.0', value: custom, oninput: (e) => { custom = e.target.value; const b = $('go'); if (b) b.textContent = goLabel() } }) : null,
+    h('div', { class: 'k-field' },
+      h('span', {}, cfg.changelog ? 'What is new (goes into CHANGELOG.md)' : 'What is new (kept with the release)'),
+      h('textarea', { rows: Math.min(8, Math.max(3, (notes ?? '').split('\n').length)), value: notes ?? '', oninput: (e) => { notes = e.target.value; notesEdited = true } })),
+    cfg.deliver.length ? h('label', { class: 'k-check' }, h('input', { type: 'checkbox', checked: alsoDeliver, onchange: (e) => { alsoDeliver = e.target.checked; if (!alsoDeliver) alsoInstall = false; render() } }), `Then: ${cfg.deliver.map((d) => d.name.toLowerCase()).join(', ')}`) : null,
+    cfg.install ? h('label', { class: 'k-check' }, h('input', { type: 'checkbox', checked: alsoInstall, onchange: (e) => { alsoInstall = e.target.checked; if (alsoInstall && cfg.deliver.length) alsoDeliver = true; render() } }), 'And install it') : null,
+    alsoInstall && cfg.install?.note ? h('div', { class: 'k-hint' }, cfg.install.note) : null,
+    h('div', { class: 'k-btns' },
+      busy
+        ? h('button', { class: 'danger', onclick: () => act(() => prism.call('stop'), 'Stopping') }, 'Stop')
+        : h('button', { class: 'primary', id: 'go', disabled: !v || !cfg.steps.length && choice === 'none', onclick: go }, goLabel()),
+      !cfg.steps.length ? h('span', { class: 'k-hint' }, 'No build steps yet: see Settings.') : null))
+}
+
+function goLabel() {
+  const v = chosenVersion()
+  return `${alsoInstall ? 'Release and install' : 'Release'} ${v || ''}`.trim()
+}
+
+async function go() {
+  const v = chosenVersion()
+  if (!v) return toast('Which version?')
+  const through = alsoInstall ? 'install' : alsoDeliver ? 'deliver' : 'handover'
+  if (alsoInstall && !(await ask(`Build ${v} and install it?${o.config.install?.note ? '\n\n' + o.config.install.note : ''}`, 'Release and install'))) return
+  await act(() => prism.call('release', { bump: choice === 'custom' ? custom.trim() : choice, notes: notes ?? '', through }))
+  notesEdited = false
+}
+
+function stepView(s, i) {
+  const cls = s.status === 'done' ? 'ok' : s.status === 'failed' ? 'bad' : s.status === 'running' ? 'run' : ''
+  const open = openLogs.has(s.id) || s.status === 'failed'
+  const took = s.startedAt ? dur((s.endedAt ?? Date.now()) - s.startedAt) : ''
+  return h('div', { class: 'k-step' + (s.status === 'running' ? ' on' : '') },
+    h('span', { class: 'k-num ' + cls }, s.status === 'done' ? '✓' : s.status === 'failed' ? '!' : String(i + 1)),
+    h('div', { class: 'k-grow' },
+      h('div', { class: 'k-trunc' }, s.name),
+      s.note ? h('div', { class: s.status === 'failed' ? 'bad-text k-hint' : 'k-hint' }, s.note) : null),
+    h('span', { class: 'k-hint' }, s.status === 'skipped' ? 'skipped' : s.status === 'waiting' ? '' : took),
+    s.log.length ? h('button', { class: 'ghost small', onclick: () => { open ? openLogs.delete(s.id) : openLogs.add(s.id); renderSteps() } }, open ? 'Hide' : 'Output') : null,
+    open && s.log.length ? h('pre', { class: 'k-log', style: { flexBasis: '100%' } }, s.log.join('\n')) : null)
+}
+
+function renderSteps() {
+  const el = $('steps')
+  if (!el) return
+  const r = o.run
+  if (!r) return mount(el)
+  const head = r.status === 'running' ? `${r.rollback ? 'Putting back' : r.extra ? `Building the ${r.extra.toLowerCase()}` : 'Releasing'} ${r.version}…` : r.status === 'done' ? `${r.rollback ? 'Put back' : r.extra ?? 'Released'} ${r.version}` : r.status === 'failed' ? `${r.version} did not finish` : `${r.version} was stopped`
+  mount(el, h('div', { class: 'k-card k-col' },
+    h('div', { class: 'k-row' },
+      h('span', { class: 'k-dot ' + (r.status === 'done' ? 'ok' : r.status === 'failed' ? 'bad' : r.status === 'running' ? 'run' : 'warn') }),
+      h('b', { class: 'k-grow k-trunc' }, head),
+      h('span', { class: 'k-hint' }, r.endedAt ? ago(r.endedAt) : r.by !== 'you' ? `started by ${r.by}` : '')),
+    h('div', { class: 'k-steps' }, r.steps.map(stepView)),
+    r.artifacts.length ? h('div', {}, h('div', { class: 'k-hint' }, 'What it made'), r.artifacts.map(artifact)) : null))
+}
+
+function artifact(a) {
+  return h('div', { class: 'art' },
+    h('div', { class: 'k-grow' }, h('span', { class: 'k-trunc' }, a.name), h('span', { class: 'k-hint k-trunc', title: a.path }, `${bytes(a.size)} · ${a.path}`)),
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary small', onclick: () => act(() => prism.call('attach', { path: a.path, note: `${o.project} ${o.run?.version ?? ''}`.trim() }), 'Handed over in your conversation') }, 'Give it to me'),
+      h('button', { class: 'small', onclick: () => act(() => prism.call('reveal', { path: a.path })) }, 'Open')))
+}
+
+function extras() {
+  const x = o.config.extras
+  if (!x.length) return null
+  const busy = o.run?.status === 'running'
+  return h('div', { class: 'k-card k-col' },
+    h('h3', {}, 'On request'),
+    x.map((e, i) => h('div', { class: 'k-row' },
+      h('div', { class: 'k-grow' }, h('div', {}, e.name), e.note ? h('div', { class: 'k-hint' }, e.note) : null),
+      h('button', { disabled: busy, onclick: async () => (await ask(`Build the ${e.name.toLowerCase()} now?`, 'Build it')) && act(() => prism.call('extra', { index: i })) }, `Build ${o.version}`))))
+}
+
+function earlier() {
+  const list = o.history
+  const disk = new Map(o.onDisk.map((d) => [d.version, d.files]))
+  if (!list.length && !o.onDisk.length) return null
+  const canPutBack = !!(o.config.rollback || o.config.install)
+  const shown = new Set()
+  const rows = []
+  for (const r of list) {
+    shown.add(r.version)
+    rows.push({ version: r.version, at: r.at, outcome: r.rollback ? `put back${r.outcome === 'done' ? '' : `, ${r.outcome}`}` : r.outcome, install: r.install, by: r.by })
+  }
+  for (const d of o.onDisk) if (!shown.has(d.version)) rows.push({ version: d.version, at: Math.max(...d.files.map((f) => f.at)), outcome: 'built', install: null })
+  rows.sort((a, b) => b.at - a.at)
+  return h('div', { class: 'k-card' },
+    h('h3', {}, 'Earlier releases'),
+    rows.slice(0, 15).map((r) => {
+      const files = disk.get(r.version) ?? []
+      const pill = r.outcome === 'done' ? 'ok' : r.outcome === 'failed' ? 'bad' : r.outcome === 'running' ? 'accent' : ''
+      return h('div', { class: 'hist' },
+        h('div', { class: 'k-grow' },
+          h('div', { class: 'k-row' },
+            h('b', {}, r.version),
+            h('span', { class: 'k-pill ' + pill }, r.outcome === 'done' ? 'released' : r.outcome),
+            r.install ? h('span', { class: 'k-pill ' + (r.install.outcome === 'done' ? 'ok' : r.install.outcome === 'failed' ? 'bad' : '') }, r.install.outcome === 'done' ? 'installed' : r.install.outcome === 'failed' ? 'install failed' : 'install: ' + r.install.outcome) : null),
+          h('div', { class: 'k-hint' }, ago(r.at))),
+        files.length ? h('button', { class: 'small', onclick: () => act(async () => { for (const f of files) await prism.call('attach', { path: f.path, note: `${o.project} ${r.version}` }) }, 'Handed over') }, 'Give it to me') : null,
+        files.length && canPutBack && r.version !== o.version ? h('button', { class: 'small', disabled: o.run?.status === 'running', onclick: async () => (await ask(`Install ${r.version} again, in place of what is installed now?${o.config.install?.note ? '\n\n' + o.config.install.note : ''}`, `Put back ${r.version}`)) && act(() => prism.call('putBack', { version: r.version })) }, 'Put back') : null)
+    }))
+}
+
+// ---------------------------------------------------------------- settings
+
+function renderSettings() {
+  if (!draft) draft = JSON.parse(JSON.stringify(o.config))
+  const d = draft
+  const stepList = (key, title, hint) => h('div', { class: 'k-card k-col' },
+    h('h3', {}, title), hint ? h('div', { class: 'k-hint' }, hint) : null,
+    (d[key] ?? []).map((s, i) => h('div', { class: 'ed-step' },
+      h('input', { value: s.name, placeholder: 'Name', oninput: (e) => (s.name = e.target.value) }),
+      h('input', { class: 'k-mono', value: s.run, placeholder: 'Command', oninput: (e) => (s.run = e.target.value) }),
+      h('button', { class: 'ghost small', title: 'Remove', onclick: () => { d[key].splice(i, 1); renderSettings() } }, '✕'))),
+    h('div', {}, h('button', { class: 'small', onclick: () => { (d[key] ??= []).push({ name: '', run: '' }); renderSettings() } }, 'Add a step')))
+  const field = (label, value, set, mono, ph) => h('label', { class: 'k-field' }, h('span', {}, label), h('input', { class: mono ? 'k-mono' : '', value: value ?? '', placeholder: ph ?? '', oninput: (e) => set(e.target.value) }))
+  const check = (label, key) => h('label', { class: 'k-check' }, h('input', { type: 'checkbox', checked: !!d[key], onchange: (e) => (d[key] = e.target.checked) }), label)
+  d.install ??= { run: '', log: '', note: '' }
+  mount('#body',
+    h('div', { class: 'k-hint' }, 'Kept in the project as .prism/release.json. Commands run in the project folder; {version}, {root}, {temp} and {date} are filled in.'),
+    h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'The project'),
+      field('Name', d.name, (v) => (d.name = v)),
+      field('Where the version number lives (comma between files)', (d.versionFiles ?? []).join(', '), (v) => (d.versionFiles = v.split(',').map((x) => x.trim()).filter(Boolean)), true, 'package.json'),
+      check('Commit the new number (only the files it changes)', 'commit'),
+      check('Tag each release in git (v1.2.3)', 'tag'),
+      check('Add what is new to CHANGELOG.md', 'changelog')),
+    stepList('steps', 'Building', 'In order. A step that fails stops the release.'),
+    h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'What it makes'),
+      h('div', { class: 'k-hint' }, 'One file per line, with {version} where the number goes. Left empty, the desk looks for new installers in the usual folders.'),
+      h('textarea', { class: 'k-mono', rows: 3, value: (d.artifacts ?? []).join('\n'), oninput: (e) => (d.artifacts = e.target.value.split('\n').map((x) => x.trim()).filter(Boolean)) })),
+    stepList('deliver', 'Bringing the work in', 'Optional: run after the build when you tick it, like merging into the main copy or uploading.'),
+    h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'Installing'),
+      field('Command', d.install.run, (v) => (d.install.run = v), true, 'leave empty if it is not installed here'),
+      field('A log that says how it went (optional)', d.install.log, (v) => (d.install.log = v), true, '{temp}/install-{version}.log'),
+      field('What to tell you before installing (optional)', d.install.note, (v) => (d.install.note = v)),
+      field('Putting an earlier version back, if not the same command (optional)', d.rollback?.run, (v) => (d.rollback = v ? { run: v } : undefined), true)),
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary', onclick: save }, 'Save'),
+      h('button', { onclick: () => { draft = null; view = 'desk'; render() } }, 'Cancel'),
+      h('button', { class: 'ghost', onclick: () => act(() => prism.call('askAgent'), 'Asked Prism to set it up') }, 'Ask Prism to set it up')))
+}
+
+async function save() {
+  const cfg = { ...draft, steps: (draft.steps ?? []).filter((s) => s.run.trim()), deliver: (draft.deliver ?? []).filter((s) => s.run.trim()) }
+  const r = await act(() => prism.call('saveConfig', { config: cfg }), 'Saved')
+  if (r) {
+    o = r
+    draft = null
+    view = 'desk'
+    render()
+  }
+}
+
+$('settingsBtn').onclick = () => {
+  view = view === 'settings' ? 'desk' : 'settings'
+  draft = null
+  render()
+}
+
+prism.on('run', (r) => {
+  if (!o) return
+  const was = o.run?.status
+  o.run = r
+  if (r && r.status !== 'running' && was === 'running') return void load()
+  if (view === 'desk') {
+    const go = $('go')
+    if (!go !== (r?.status === 'running')) render()
+    else renderSteps()
+  }
+})
+prism.ready(() => void load().catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e)))))
+setInterval(() => { if (o?.run?.status === 'running' && view === 'desk') renderSteps() }, 1000)
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "id": "design-board",
+  "name": "Design board",
+  "description": "Sketches, screenshots and references, with Prism's versions beside them: side by side, laid over each other, or with the differences lit up.",
+  "agent": "The design board: board_look to see the user's sketches and references (look before building anything visual they have put there), board_add to put your version beside theirs (pairWith their id) instead of making pictures only you see.",
+  "intro": {
+    "icon": "palette",
+    "colour": "#f6b3c8",
+    "tagline": "Your sketches and Prism’s versions, side by side.",
+    "what": "A board where you drop sketches, screenshots of things you like, or notes about how something should look. When Prism builds something from one, its version goes next to yours, so you can compare them side by side, lay one over the other, or light up the differences.",
+    "helps": [
+      "You can show Prism what you mean instead of describing it.",
+      "You see Prism’s attempt right next to what you wanted.",
+      "\"Differences\" makes even small mismatches easy to spot."
+    ],
+    "example": "You paste a screenshot of a settings page you like and say \"make ours like this\". Prism builds it and puts a picture of its version beside yours."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "workspace": "write"
+  }
+}

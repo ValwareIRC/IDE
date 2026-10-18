@@ -1,0 +1,194 @@
+/* Dockview theme: floating glass groups with hairline borders. */
+
+.dockview-theme-prism {
+  --dv-background-color: transparent;
+  --dv-group-view-background-color: var(--glass);
+  --dv-tabs-and-actions-container-background-color: rgb(from var(--tint) r g b / 0.02);
+  --dv-tabs-and-actions-container-height: 34px;
+  --dv-tabs-and-actions-container-font-size: var(--fs-md);
+  --dv-activegroup-visiblepanel-tab-background-color: rgb(from var(--tint) r g b / 0.045);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-background-color: rgb(from var(--tint) r g b / 0.03);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: var(--text);
+  --dv-activegroup-hiddenpanel-tab-color: var(--text-3);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--text-2);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--text-3);
+  --dv-tab-divider-color: transparent;
+  --dv-separator-border: transparent;
+  --dv-paneview-header-border-color: var(--line);
+  --dv-icon-hover-background-color: rgb(from var(--tint) r g b / 0.08);
+  --dv-drag-over-background-color: var(--accent-20);
+  --dv-drag-over-border-color: var(--accent);
+  --dv-active-sash-color: var(--accent);
+  --dv-floating-box-shadow: var(--shadow-2);
+  --dv-tabs-container-scrollbar-color: rgb(from var(--tint) r g b / 0.1);
+  --dv-paneview-active-outline-color: var(--accent);
+  --dv-overlay-z-index: 50;
+  --dv-tab-close-icon: none;
+}
+
+.dockview-theme-prism .dv-groupview {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  backdrop-filter: var(--blur);
+  box-shadow:
+    inset 0 1px 0 rgb(from var(--tint) r g b / 0.035),
+    var(--shadow-1);
+  transition: border-color var(--t-med) var(--ease), box-shadow var(--t-med) var(--ease);
+}
+
+.dockview-theme-prism .dv-groupview.dv-active-group {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line-strong));
+  box-shadow:
+    inset 0 1px 0 rgb(from var(--tint) r g b / 0.05),
+    var(--shadow-1),
+    0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.dockview-theme-prism .dv-tabs-and-actions-container {
+  border-bottom: 1px solid var(--line);
+  padding: 0 4px;
+}
+
+.dockview-theme-prism .dv-tab {
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  margin-top: 4px;
+  padding: 0 10px;
+  min-width: 0;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.dockview-theme-prism .dv-tab:hover {
+  background: rgb(from var(--tint) r g b / 0.04);
+}
+
+.dockview-theme-prism .dv-active-group .dv-tab.dv-active-tab {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.dockview-theme-prism .dv-tab .dv-default-tab {
+  padding: 0;
+}
+
+.dockview-theme-prism .dv-sash {
+  z-index: 20;
+}
+
+.dockview-theme-prism .dv-sash:hover,
+.dockview-theme-prism .dv-sash.dv-active {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: calc(3px * var(--round));
+}
+
+.dockview-theme-prism .dv-render-overlay {
+  border-radius: var(--r-md);
+}
+
+.dockview-theme-prism .dv-content-container {
+  background: transparent;
+}
+
+.dockview-theme-prism .dv-void-container {
+  flex-grow: 1;
+}
+
+/* Custom tab body */
+.ptab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  max-width: 220px;
+  font-size: var(--fs-md);
+  color: inherit;
+}
+
+.ptab-icon {
+  display: inline-flex;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.dv-active-tab .ptab-icon {
+  color: var(--accent);
+}
+
+.ptab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ptab-dirty {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--amber);
+  flex-shrink: 0;
+}
+
+.ptab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: calc(4px * var(--round));
+  color: var(--text-3);
+  opacity: 0;
+  transition: opacity var(--t-fast), background var(--t-fast);
+  flex-shrink: 0;
+}
+
+.dv-tab:hover .ptab-close,
+.dv-active-tab .ptab-close {
+  opacity: 1;
+}
+
+.ptab-close:hover {
+  background: rgb(from var(--tint) r g b / 0.1);
+  color: var(--text);
+}
+
+.pgroup-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  height: 100%;
+}
+
+/* Empty group watermark */
+.dv-watermark-container,
+.dock-watermark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-4);
+  font-size: var(--fs-sm);
+  letter-spacing: var(--label-space, 0.08em);
+  text-transform: var(--label-case, uppercase);
+}
+
+/* look-only and pinned tabs */
+.ptab.look .ptab-title {
+  font-style: italic;
+  color: var(--text-3);
+}
+
+.ptab-pin {
+  display: inline-flex;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* dockview's layout boxes hide overflow, which still lets focus() or scrollIntoView shift a whole column; clip cannot be scrolled */
+.dv-split-view-container,
+.dv-view-container,
+.dv-grid-view,
+.dv-branch-node {
+  overflow: clip !important;
+}

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      A gadget's own page, on the phone. The app page has a strict policy that forbids
+      inline scripts, and a frame written into by its parent inherits that policy — which
+      would stop every gadget dead. So a gadget gets this document of its own instead: it
+      is loaded from the app's own files, carries the looser policy a gadget needs, and is
+      sandboxed, so it has no way back into the app or its keys.
+
+      It holds nothing itself: it asks the app for the gadget's page, which arrives with
+      its stylesheets, scripts and pictures already folded in (core/gadgets/inline.ts),
+      and writes it here.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; style-src 'unsafe-inline' https:; img-src data: blob: https:; font-src data: https:; media-src data: blob: https:; connect-src https: wss: data: blob:; worker-src blob:; child-src blob:"
+    />
+    <title>Gadget</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0f1219;
+        color: #a7aec0;
+        font: 14px/1.5 system-ui, sans-serif;
+      }
+      #waiting {
+        display: grid;
+        place-items: center;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="waiting">Just a moment…</div>
+    <script>
+      ;(function () {
+        var asked = 0
+        function ask() {
+          asked += 1
+          parent.postMessage({ __prismGadgetBoot: true }, '*')
+          // the app may not be listening yet on the first beat
+          if (asked < 20) setTimeout(ask, 150)
+        }
+        window.addEventListener('message', function (e) {
+          if (e.source !== parent) return
+          var m = e.data
+          if (!m || m.__prismGadgetPage !== true || typeof m.html !== 'string') return
+          asked = 99
+          document.open()
+          document.write(m.html)
+          document.close()
+        })
+        ask()
+      })()
+    </script>
+  </body>
+</html>

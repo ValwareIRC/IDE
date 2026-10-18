@@ -1,0 +1,90 @@
+/* Prism design tokens. These are the defaults (the Aurora theme); the active theme overrides them from theme/apply.ts. */
+
+:root {
+  --bg-0: #07080c;
+  --bg-1: #0b0d13;
+  --bg-2: #10131b;
+  --bg-3: #161a25;
+  --bg-4: #1d2230;
+  --glass: rgba(13, 15, 22, 0.72);
+  --glass-strong: rgba(16, 19, 27, 0.9);
+
+  /* overlays are tints of these two: white and black in a dark theme, the other way round in a light one */
+  --tint: #ffffff;
+  --shade: #000000;
+  --on-accent: #0b0d13;
+  /* multiplies every corner size */
+  --round: 1;
+
+  --line: rgba(255, 255, 255, 0.065);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --line-faint: rgba(255, 255, 255, 0.035);
+
+  --text: #e9ecf4;
+  --text-2: #a7aec0;
+  --text-3: #6d7489;
+  --text-4: #4a5064;
+
+  --accent: #8ad8ff;
+  --accent-2: #b9a7ff;
+  --mint: #7ee8c3;
+  --amber: #ffc46b;
+  --rose: #ff7b93;
+  --violet: #b9a7ff;
+
+  --accent-12: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-20: color-mix(in srgb, var(--accent) 20%, transparent);
+  --accent-35: color-mix(in srgb, var(--accent) 35%, transparent);
+  --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 0 28px color-mix(in srgb, var(--accent) 16%, transparent);
+  --glow-soft: 0 0 22px color-mix(in srgb, var(--accent) 10%, transparent);
+  --shadow-1: 0 2px 10px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 12px 40px rgba(0, 0, 0, 0.5);
+
+  --r-xs: 5px;
+  --r-sm: 7px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  --font-ui: 'Inter Variable', 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'Cascadia Code', Consolas, ui-monospace, monospace;
+  --fs-xs: 10.5px;
+  --fs-sm: 11.5px;
+  --fs-md: 12.5px;
+  --fs-base: 13px;
+  --fs-lg: 14.5px;
+  --fs-xl: 18px;
+
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-fast: 140ms;
+  --t-med: 240ms;
+
+  --titlebar-h: 38px;
+  --statusbar-h: 24px;
+  --rail-w: 46px;
+  --blur: blur(18px) saturate(1.3);
+
+  color-scheme: dark;
+}
+
+:root[data-accent='lilac'] { --accent: #b9a7ff; --accent-2: #8ad8ff; }
+:root[data-accent='mint'] { --accent: #7ee8c3; --accent-2: #8ad8ff; }
+:root[data-accent='ember'] { --accent: #ffb27a; --accent-2: #ff8fab; }
+:root[data-accent='rose'] { --accent: #ff8fab; --accent-2: #b9a7ff; }
+:root[data-accent='gold'] { --accent: #f2d27a; --accent-2: #8ad8ff; }
+
+:root[data-motion='off'] {
+  --t-fast: 0ms;
+  --t-med: 0ms;
+}
+
+:root[data-glow='off'] {
+  --glow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+  --glow-soft: none;
+}
+
+:root[data-density='compact'] {
+  --fs-base: 12.5px;
+  --fs-md: 12px;
+  --titlebar-h: 34px;
+}

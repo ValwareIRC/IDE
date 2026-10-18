@@ -1,0 +1,16 @@
+{
+  "id": "system-pulse",
+  "name": "System pulse",
+  "description": "How busy this computer is, in plain words: how hard it is thinking, how full its memory is, and which programs are doing the most.",
+  "agent": "This computer's busyness: system_stats gives processor use, memory use, and the programs using the most of each right now. Use it when something feels slow.",
+  "intro": {
+    "icon": "activity",
+    "colour": "#9ee6c2",
+    "tagline": "How busy your computer is, in plain words.",
+    "what": "A live look at your computer: how hard its processor is thinking, how full its memory is, and which programs are doing the most right now. Each number comes with a sentence saying whether it is fine.",
+    "helps": ["When the computer feels slow, it shows what is to blame.", "You can tell at a glance whether there is room to start something big.", "Prism can read the same numbers when you ask it why things are slow."],
+    "example": "The computer suddenly feels sluggish. System pulse shows memory nearly full and Firefox holding 6 GB across its tabs. Closing a few tabs fixes it."
+  },
+  "backend": "backend.mjs",
+  "permissions": { "shell": true, "network": false, "workspace": "none" }
+}

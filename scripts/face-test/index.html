@@ -1,0 +1,62 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>face test</title>
+<style>
+  html, body { margin: 0; background: #0b0d13; color: #e9ecf4; font: 12px system-ui; }
+  #small { width: 120px; height: 120px; margin: 10px; border-radius: 50%; overflow: hidden; display: inline-block; background: radial-gradient(circle at 50% 35%, #1d2a3a, #0b0d13); }
+  #big { width: 420px; height: 280px; border-radius: 14px; overflow: hidden; background: radial-gradient(circle at 50% 30%, #1a2636, #0b0d13 70%); }
+</style>
+</head>
+<body>
+<div id="big"></div>
+<script src="face-test.js"></script>
+<script>
+  // Everything the face reacts to, set from outside by the test.
+  window.face = { stage: 'listening', mic: 0, speech: { at: 0, level: 0, source: 'sound', low: 0, high: 0, word: '', wordAt: 0 } }
+  const inputs = { stage: () => face.stage, mic: () => face.mic, speech: () => face.speech }
+  ;(async () => {
+    const q = new URLSearchParams(location.search)
+    const bytes = await (await fetch(q.get('file'))).arrayBuffer()
+    const view = await FaceView.create(bytes, inputs)
+    window.view = view
+    const host = document.getElementById(q.get('host') || 'big')
+    if (q.get('host') === 'small') { document.getElementById('big').id = 'small' }
+    view.mount(document.getElementById(q.get('host') === 'small' ? 'small' : 'big'), q.get('host') === 'small' ? 'head' : 'shoulders')
+    document.title = 'ready'
+  })().catch((e) => { document.title = 'failed: ' + e.message })
+</script>
+<script>
+  // Plays a recording the way lib/speech.ts does, feeding the face what the call would.
+  window.talk = async (url) => {
+    const ctx = new AudioContext()
+    const buffer = await ctx.decodeAudioData(await (await fetch(url)).arrayBuffer())
+    const source = ctx.createBufferSource()
+    const level = ctx.createAnalyser()
+    level.fftSize = 512
+    level.smoothingTimeConstant = 0.45
+    source.buffer = buffer
+    source.connect(level).connect(ctx.destination)
+    const samples = new Uint8Array(level.fftSize)
+    const spectrum = new Float32Array(level.frequencyBinCount)
+    const binHz = ctx.sampleRate / level.fftSize
+    const centre = (from, to) => { let w = 0, x = 0; for (let k = Math.round(from / binHz); k <= Math.round(to / binHz); k++) { const p = Math.pow(10, (spectrum[k] ?? -200) / 10); w += p; x += p * k * binHz } return w ? x / w : 0 }
+    face.stage = 'speaking'
+    window.trace = []
+    const timer = setInterval(() => {
+      level.getByteTimeDomainData(samples)
+      let peak = 0
+      for (const v of samples) peak = Math.max(peak, Math.abs(v - 128))
+      level.getFloatFrequencyData(spectrum)
+      Object.assign(face.speech, { at: Date.now(), level: Math.min(1, peak / 70), source: 'sound', f1: centre(200, 1000), f2: centre(1000, 3200) })
+      trace.push([Math.round(ctx.currentTime * 1000), +face.speech.level.toFixed(2), Math.round(face.speech.f1), Math.round(face.speech.f2)])
+    }, 40)
+    await ctx.resume()
+    source.start()
+    window.talking = true
+    source.onended = () => { clearInterval(timer); face.speech.level = 0; window.talking = false }
+  }
+</script>
+</body>
+</html>

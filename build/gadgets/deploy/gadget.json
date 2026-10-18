@@ -1,0 +1,24 @@
+{
+  "id": "deploy",
+  "name": "Deploy",
+  "description": "Deploy to servers with a way back: keep the running copy, deploy, check it works, and put the old one back by itself if it does not. Always asks first.",
+  "agent": "Deploying to servers: deploy_status, deploy_check, deploy_run and deploy_put_back. A deploy always asks the user in its panel first and puts the old version back by itself if the new one is not working. Only deploy when asked.",
+  "intro": {
+    "icon": "server",
+    "colour": "#c7b4f5",
+    "tagline": "Puts a new version on a server, with a safety net.",
+    "what": "Some things you make live on a server on the internet, like the relay the phone app connects through. Deploying means swapping the old version there for the new one. This keeps a copy of the old one first, puts the new one in, checks it works, and if it does not, puts the old one back by itself.",
+    "helps": [
+      "A bad update never stays broken: it rolls back on its own.",
+      "It always asks you first, showing exactly what it will do.",
+      "Passwords stay locked away, never written into files."
+    ],
+    "example": "You press \"Deploy\" on the phone relay. It saves the running relay, copies the new one over, restarts it, and checks it is up. If it is not, the old one is back within seconds."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "shell": true,
+    "network": true,
+    "workspace": "write"
+  }
+}

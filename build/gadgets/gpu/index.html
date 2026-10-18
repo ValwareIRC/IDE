@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .meter { height: 14px; border-radius: 7px; background: rgba(255,255,255,.07); overflow: hidden; display: flex; }
+  .meter i { display: block; height: 100%; }
+  .svc { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); min-width: 0; flex-wrap: wrap; }
+  .svc:last-child { border-bottom: 0; }
+  .svc .k-dot { margin-top: 6px; }
+  .svc .k-grow { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .model { display: flex; gap: 8px; align-items: center; font-size: 12.5px; flex-wrap: wrap; }
+  .mood { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-radius: 14px; --m: var(--mint, #7ee2b8); background: color-mix(in srgb, var(--m) 10%, transparent); border: 1px solid color-mix(in srgb, var(--m) 30%, transparent); }
+  .mood.warn { --m: var(--amber, #f5c97a); } .mood.bad { --m: var(--rose, #f59ab0); }
+  .mood b { font-size: 15px; } .mood span { font-size: 12.5px; color: var(--text-2, #a7aec0); }
+  .jobform { display: grid; grid-template-columns: minmax(160px, 3fr) minmax(90px, 1fr) 80px auto; gap: 6px; }
+  @media (max-width: 560px) { .jobform { grid-template-columns: 1fr 1fr; } .jobform .cmd { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<div class="k-app">
+  <div class="k-top"><span class="k-title">Graphics card</span><button class="small" id="freeAll" title="Let go of models that are loaded but not working">Make room</button></div>
+  <div class="k-body" id="body"><div class="k-empty">Asking the card…</div></div>
+</div>
+<script>
+const { h, mount, ago, dur, toast, act, ask } = kit
+let s = null
+const job = { command: '', name: '', needGB: 6 }
+const openLogs = new Set()
+const gb = (mb) => `${(mb / 1024).toFixed(1)} GB`
+
+function render() {
+  if (!s) return
+  const c = s.card
+  if (!c) return mount('#body', h('div', { class: 'k-empty' }, 'No NVIDIA graphics card answered (nvidia-smi was not found).'))
+  const known = s.services.filter((x) => x.up && x.holdsMB)
+  const knownMB = known.reduce((a, x) => a + x.holdsMB, 0)
+  const colours = ['var(--accent, #8ad8ff)', 'var(--amber, #f5c97a)', 'var(--rose, #f59ab0)']
+  const freeGB = c.freeMB / 1024
+  const room = freeGB >= 10 ? ['ok', 'Lots of room', 'Even a big AI model would fit right now.'] : freeGB >= 5 ? ['ok', 'Some room', `A medium-sized model (up to about ${Math.floor(freeGB - 1)} GB) would fit; a big one would not.`] : freeGB >= 2 ? ['warn', 'Getting full', 'Only small things will fit. "Make room" can clear out models nobody is using.'] : ['bad', 'Full', 'Starting anything else on the card could crash it. Make room first.']
+  const busyWords = c.util < 15 ? 'Resting' : c.util < 60 ? 'Working' : 'Working flat out'
+  const tempWords = c.temp < 70 ? 'cool' : c.temp < 83 ? 'warm, which is fine' : 'hot: it may slow itself down'
+  mount('#body',
+    h('div', { class: 'mood ' + room[0] },
+      h('b', {}, room[1]),
+      h('span', {}, room[2])),
+    h('div', { class: 'k-card k-col' },
+      h('div', { class: 'k-row' }, h('b', { class: 'k-grow' }, 'The graphics card’s own memory'), h('span', { class: 'k-hint' }, c.name)),
+      h('div', { class: 'k-hint' }, 'This is separate from the computer’s memory (System pulse shows that one). AI models have to fit in here to run on the card.'),
+      h('div', { class: 'meter', title: `${gb(c.usedMB)} of ${gb(c.totalMB)}` },
+        known.map((x, i) => h('i', { title: `${x.name}: ${gb(x.holdsMB)}`, style: { width: `${(x.holdsMB / c.totalMB) * 100}%`, background: colours[i % colours.length] } })),
+        h('i', { title: 'everything else', style: { width: `${(Math.max(0, c.usedMB - knownMB) / c.totalMB) * 100}%`, background: 'rgba(255,255,255,.28)' } })),
+      h('div', { class: 'k-row' }, h('span', { class: 'k-grow' }, `${gb(c.usedMB)} in use`), h('b', { class: c.freeMB < 2048 ? 'bad-text' : c.freeMB < 6144 ? 'warn-text' : 'ok-text' }, `${gb(c.freeMB)} free`), h('span', { class: 'k-hint' }, `of ${gb(c.totalMB)}`)),
+      h('div', { class: 'k-hint' }, `${busyWords} (${c.util}% busy) · ${c.temp}°C, ${tempWords} · using ${Math.round(c.power)} watts`)),
+    h('div', { class: 'k-card' }, h('h3', {}, 'AI programs'),
+      h('div', { class: 'k-hint', style: { marginBottom: '4px' } }, 'The ones that use the card the most. When one is not running, it takes no room.'),
+      s.services.map((x) => h('div', { class: 'svc' },
+        h('span', { class: 'k-dot ' + (x.up ? 'ok' : '') }),
+        h('div', { class: 'k-grow' },
+          h('div', { class: 'k-row' }, h('b', {}, x.name), h('span', { class: 'k-hint' }, x.up ? (x.holdsMB != null ? `running, using ${gb(x.holdsMB)} of the card` : 'running') : 'not running')),
+          x.kind === 'ollama' && x.up ? (x.models.length ? x.models.map((m) => h('div', { class: 'model' }, h('span', {}, m.name), h('span', { class: 'k-hint' }, `${gb(m.vramMB)} on the card${m.until ? `, lets go ${new Date(m.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`), h('button', { class: 'small', onclick: () => act(async () => { toast(await prism.call('free', { what: 'ollama', model: m.name })); await refresh() }) }, 'Let go'))) : h('span', { class: 'k-hint' }, 'Nothing loaded.')) : null,
+          x.kind === 'comfyui' && x.up ? h('span', { class: 'k-hint' }, x.running ? `Working on ${x.running} job${x.running === 1 ? '' : 's'}${x.waiting ? `, ${x.waiting} waiting` : ''}` : 'Idle') : null),
+        x.kind === 'comfyui' && x.up && !x.running ? h('button', { class: 'small', onclick: () => act(async () => { toast(await prism.call('free', { what: 'comfyui' })); await refresh() }) }, 'Let go') : null))),
+    s.programs.length ? h('div', { class: 'k-card' }, h('h3', {}, 'Other programs on the card'), h('div', { class: 'k-hint' }, `${s.programs.map((p) => p.name).join(', ')}. These each use a little to draw what is on screen; nothing to worry about.`)) : null,
+    jobsCard(),
+    h('div', { class: 'k-hint' }, `Checked ${ago(s.at)}.`))
+}
+
+function jobsCard() {
+  const list = s.jobs ?? []
+  return h('div', { class: 'k-card k-col' },
+    h('h3', {}, 'Heavy jobs, one at a time'),
+    h('div', { class: 'k-hint' }, 'For big jobs, like making a 3D model or a picture. Each one waits until the card has enough room, clearing out models nobody is using first, so two big jobs never crash into each other. Give the command, a name, and roughly how many GB it needs.'),
+    h('div', { class: 'jobform' },
+      h('input', { class: 'cmd k-mono', placeholder: 'A command, like python generate.py', value: job.command, oninput: (e) => (job.command = e.target.value) }),
+      h('input', { placeholder: 'Name', value: job.name, oninput: (e) => (job.name = e.target.value) }),
+      h('input', { type: 'number', min: 0.5, step: 0.5, value: job.needGB, placeholder: 'GB', title: 'Roughly how much of the card it needs, in GB', oninput: (e) => (job.needGB = Number(e.target.value)) }),
+      h('button', { class: 'primary', onclick: () => { if (!job.command.trim()) return toast('What should run?'); act(async () => { await prism.call('enqueue', job); await refresh() }, 'Queued') } }, 'Queue it')),
+    list.length ? list.slice().reverse().map((j) => {
+      const open = openLogs.has(j.id)
+      return h('div', { class: 'k-step' + (j.state === 'running' ? ' on' : '') },
+        h('span', { class: 'k-dot ' + ({ running: 'run', done: 'ok', failed: 'bad', 'gave up': 'bad', waiting: 'warn' }[j.state] ?? '') }),
+        h('div', { class: 'k-grow' }, h('div', { class: 'k-trunc' }, `${j.name}${j.by !== 'you' ? ` (${j.by})` : ''}`), h('div', { class: 'k-hint' }, `${j.state}${j.note ? ` · ${j.note}` : ''}${j.startedAt ? ` · ${dur((j.endedAt ?? Date.now()) - j.startedAt)}` : ''} · needs ${(j.needMB / 1024).toFixed(1)} GB`)),
+        ['waiting', 'running'].includes(j.state) ? h('button', { class: 'small danger', onclick: () => act(() => prism.call('stopJob', { id: j.id })) }, 'Stop') : null,
+        j.log.length ? h('button', { class: 'small ghost', onclick: () => { open ? openLogs.delete(j.id) : openLogs.add(j.id); render() } }, open ? 'Hide' : 'Output') : null,
+        open ? h('pre', { class: 'k-log', style: { flexBasis: '100%' } }, j.log.join('\n')) : null)
+    }) : null)
+}
+
+async function refresh() {
+  s = await prism.call('status')
+  render()
+}
+
+document.getElementById('freeAll').onclick = () => act(async () => { toast(await prism.call('free', { what: 'all' })); await refresh() })
+prism.on('status', (x) => { s = x; render() })
+prism.on('jobs', (j) => { if (s) { s.jobs = j; render() } })
+prism.ready(() => {
+  void refresh().catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e))))
+  // fresh numbers while the panel is open
+  void prism.call('watch', { on: true })
+  addEventListener('pagehide', () => void prism.call('watch', { on: false }))
+})
+</script>
+</body>
+</html>

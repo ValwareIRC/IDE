@@ -1,0 +1,23 @@
+{
+  "id": "gpu",
+  "name": "Graphics card",
+  "description": "What is using the graphics card, freeing what sits idle, and heavy jobs run one at a time so two big models never crash into each other.",
+  "agent": "The graphics card: gpu_status before loading a model or rendering, gpu_free to let go of idle ollama models or ComfyUI's cache, gpu_run to run a heavy job through the queue so it waits for room instead of crashing into another.",
+  "intro": {
+    "icon": "cpu",
+    "colour": "#b5e88f",
+    "tagline": "Stops your AI programs crashing into each other on the graphics card.",
+    "what": "ollama, ComfyUI, Hunyuan3D and games all share the same 16 GB graphics card. If two big ones load at once, something crashes. This shows what is using the card, frees up memory held by programs that are sitting idle, and runs big jobs one at a time, each waiting until there is room.",
+    "helps": [
+      "You can see at a glance what is filling the card.",
+      "Idle models can be cleared out with one button.",
+      "Big jobs wait their turn instead of crashing."
+    ],
+    "example": "You start a 3D model while ollama is holding a big model it is not using. The job frees it, waits until there is room, then starts."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "shell": true,
+    "network": true
+  }
+}

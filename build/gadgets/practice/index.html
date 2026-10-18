@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  label.k-check { display: flex; gap: 8px; align-items: center; font-size: 12.5px; cursor: pointer; }
+  .entry { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .entry:last-child { border-bottom: 0; }
+  .entry .said { font-size: 12.5px; }
+  .entry .said b { font-weight: 500; color: var(--text-2, #a7aec0); }
+  .area { display: grid; grid-template-columns: minmax(90px, 160px) minmax(60px, 1fr) auto; gap: 8px; align-items: center; font-size: 12.5px; padding: 2px 0; }
+  .course { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+  .course:last-child { border-bottom: 0; }
+  iframe.lesson { width: 100%; height: 70vh; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; background: #fff; }
+</style>
+</head>
+<body>
+<div class="k-app">
+  <div class="k-top"><span class="k-title">Practice</span></div>
+  <div class="k-body" id="body"><div class="k-empty">Reading your record…</div></div>
+</div>
+<script>
+const { h, mount, ago, toast, act } = kit
+let o = null
+let lesson = null
+const pct = (x) => (x == null ? '–' : `${Math.round(x * 100)}%`)
+
+async function load() {
+  o = await prism.call('overview')
+  render()
+}
+
+function render() {
+  const t = o.tally
+  mount('#body',
+    h('div', { class: 'k-card k-col' },
+      h('div', { class: 'k-row' }, h('h3', { class: 'k-grow', style: { margin: 0 } }, 'The Pre-mortem'), h('label', { class: 'k-check' }, h('input', { type: 'checkbox', checked: o.premortem, onchange: (e) => act(async () => { await prism.call('setPremortem', { on: e.target.checked }); o.premortem = e.target.checked; render() }, e.target.checked ? 'On' : 'Off') }), 'On')),
+      h('div', { class: 'k-hint' }, 'Before Prism diagnoses a real problem, it asks what you think is wrong and what you would try first. Afterwards it compares notes and keeps the score here, so you can see where your instincts are good and where they are going soft.'),
+      t.count ? h('div', { class: 'k-grid' },
+        h('div', { class: 'k-stat' }, h('b', {}, pct(t.score)), h('span', {}, `right, over ${t.count}`)),
+        h('div', { class: 'k-stat' }, h('b', {}, pct(t.recent)), h('span', {}, 'the last 20'))) : h('div', { class: 'k-hint' }, 'No Pre-mortems yet. The first comes with the next real problem.'),
+      t.areas.length ? h('div', {}, t.areas.map((a) => h('div', { class: 'area' }, h('span', { class: 'k-trunc' }, a.area), h('div', { class: 'k-bar' }, h('i', { class: a.score >= 0.66 ? 'ok' : a.score >= 0.4 ? 'warn' : 'bad', style: { width: `${Math.round((a.score ?? 0) * 100)}%` } })), h('span', { class: 'k-hint' }, `${pct(a.score)} of ${a.count}`)))) : null),
+    h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'The Workshop'),
+      h('div', { class: 'k-hint' }, 'A small, real piece of the project to do by hand: a function, a bug, a design choice, in a part you have not touched lately. Prism sets it up and steps back; when you are done, you talk it over.'),
+      h('div', { class: 'k-btns' },
+        h('button', { class: 'primary', onclick: () => act(() => prism.call('workshop'), 'Asked Prism for a piece') }, 'Give me a piece'),
+        h('span', { class: 'k-hint' }, 'Remind me'),
+        h('select', { onchange: (e) => act(() => prism.call('setWorkshopEvery', { every: e.target.value })) }, [['off', 'never'], ['weekly', 'every week'], ['fortnightly', 'every two weeks']].map(([v, l]) => h('option', { value: v, selected: o.workshopEvery === v }, l)))),
+      t.workshops ? h('div', { class: 'k-hint' }, `${t.workshops} piece${t.workshops === 1 ? '' : 's'} so far, the last ${ago(t.lastWorkshop)}.`) : null),
+    coursesCard(),
+    recordCard())
+}
+
+function coursesCard() {
+  if (!o.courses.length) return null
+  return h('div', { class: 'k-card k-col' },
+    h('h3', {}, 'Your courses'),
+    o.courses.map((c) => h('div', { class: 'course' },
+      h('div', { class: 'k-row' }, h('b', {}, c.name), h('span', { class: 'k-hint k-grow k-trunc' }, c.title), h('span', { class: 'k-hint' }, `${c.passed} of ${c.total}`)),
+      h('div', { class: 'k-bar' }, h('i', { class: 'ok', style: { width: `${(c.passed / Math.max(1, c.total)) * 100}%` } })),
+      h('div', { class: 'k-row' },
+        h('span', { class: 'k-grow k-hint k-trunc' }, c.next ? `Next: ${c.next.n}. ${c.next.title}${c.lastAt ? ` · last passed ${ago(c.lastAt)}` : ''}` : 'Finished!'),
+        h('button', { class: 'small primary', onclick: (e) => openCourse(c, e.target) }, lesson?.name === c.name ? 'Reload' : 'Open it here'),
+        h('a', { class: 'small', href: c.url, target: '_blank', rel: 'noreferrer', onclick: async (e) => { e.preventDefault(); const url = await act(() => prism.call('openCourse', { name: c.name })); if (url) window.open(url) } }, 'In a browser')))),
+    lesson ? h('iframe', { class: 'lesson', src: lesson.url }) : null)
+}
+
+async function openCourse(c, btn) {
+  btn.disabled = true
+  btn.textContent = 'Starting…'
+  const url = await act(() => prism.call('openCourse', { name: c.name }))
+  if (url) lesson = { name: c.name, url: `${url}/?t=${Date.now()}` }
+  render()
+}
+
+function recordCard() {
+  const list = o.record
+  if (!list.length) return null
+  return h('div', { class: 'k-card' }, h('h3', {}, 'The record'),
+    list.slice(0, 30).map((e) => h('div', { class: 'entry' },
+      h('div', { class: 'k-row' },
+        h('span', { class: 'k-pill ' + (e.kind === 'workshop' ? 'accent' : e.verdict === 'right' ? 'ok' : e.verdict === 'close' ? 'warn' : 'bad') }, e.kind === 'workshop' ? 'Workshop' : e.verdict === 'right' ? 'right' : e.verdict === 'close' ? 'close' : 'missed'),
+        e.area ? h('span', { class: 'k-hint' }, e.area) : null,
+        h('span', { class: 'k-grow' }),
+        h('span', { class: 'k-hint' }, `${e.project ? `${e.project} · ` : ''}${ago(e.at)}`)),
+      e.guess ? h('div', { class: 'said' }, h('b', {}, 'You said: '), e.guess) : null,
+      e.actual ? h('div', { class: 'said' }, h('b', {}, 'It was: '), e.actual) : null,
+      e.note ? h('div', { class: 'k-hint' }, e.note) : null)))
+}
+
+prism.on('record', () => load())
+prism.ready(() => void load().catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e)))))
+</script>
+</body>
+</html>

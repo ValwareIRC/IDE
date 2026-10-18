@@ -1,0 +1,23 @@
+{
+  "id": "data",
+  "name": "Data",
+  "description": "Look into the project's databases and try requests against its APIs. Every query and request Prism makes is listed, and anything that would change data waits for your yes.",
+  "agent": "Databases and APIs: db_connections (the project's databases and their tables, or a schema), db_query (reading runs at once through a connection that cannot write; changes wait for the user's yes in the panel), api_request (GET at once; POST, PUT, PATCH and DELETE to anywhere but this computer wait for the user's yes). Use them instead of ad-hoc scripts, so the user sees what you ran.",
+  "intro": {
+    "icon": "database",
+    "colour": "#8fd5e8",
+    "tagline": "Look inside databases and try out web requests.",
+    "what": "Many projects keep information in a database, or talk to other services over the web. This lets you look at the tables in a database and ask it questions, and send test requests to a web service to see what comes back. It also shows you everything Prism looks at or sends.",
+    "helps": [
+      "No separate database program needed.",
+      "Anything that would change or delete data waits for your yes.",
+      "You can see every query and request Prism made."
+    ],
+    "example": "Prism wants to fix a bug in your shop app. It looks at the orders table, and when it wants to delete a test order, a box pops up asking you first."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "network": true,
+    "workspace": "write"
+  }
+}

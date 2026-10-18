@@ -1,0 +1,155 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .need { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.04); min-width: 0; }
+  .need:last-child { border-bottom: 0; }
+  .need .k-dot { margin-top: 6px; }
+  .need .k-grow { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .need .found { font-size: 12px; color: var(--text-2, #a7aec0); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .need .fixline { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+  .need code { font-family: var(--font-mono, monospace); font-size: 11.5px; color: var(--text-2, #a7aec0); word-break: break-all; }
+  .need .why { font-size: 12px; color: var(--text-2, #a7aec0); }
+  .need .rm { visibility: hidden; }
+  .need:hover .rm { visibility: visible; }
+  .form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
+  label.k-check { display: flex; gap: 8px; align-items: center; font-size: 12.5px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="k-app">
+  <div class="k-top">
+    <span class="k-title">Setup</span>
+    <button class="primary small" id="checkBtn">Check this computer</button>
+  </div>
+  <div class="k-body" id="body"><div class="k-empty">Reading what is needed…</div></div>
+</div>
+<script>
+const { h, mount, ago, toast, act, ask } = kit
+let o = null
+let suggestions = null
+let adding = null
+let checking = false
+const $ = (id) => document.getElementById(id)
+const RUNNABLE = /^(winget|corepack|setx|npm|pnpm|pip|python -m pip|choco|scoop|brew|sudo|apt|cargo install|rustup|curl|powershell)\b/i
+
+async function load() {
+  o = await prism.call('overview')
+  render()
+}
+
+function resultFor(scope, name) {
+  return o.lastCheck?.results.find((r) => r.scope === scope && r.name === name) ?? null
+}
+
+function render() {
+  const all = o.lastCheck?.results ?? []
+  const bad = all.filter((r) => !r.ok).length
+  mount('#body',
+    o.lastCheck ? h('div', { class: 'k-row' }, h('span', { class: 'k-dot ' + (bad ? 'bad' : 'ok') }), h('b', { class: 'k-grow' }, bad ? `${bad} of ${all.length} not in place` : `All ${all.length} in place`), h('span', { class: 'k-hint' }, `checked ${ago(o.lastCheck.at)}`)) : null,
+    listCard('project', 'This project needs', o.projectNeeds, o.project ? 'Kept in the project as .prism/setup.json, so it travels with the code.' : 'Open a project to see what it needs.'),
+    listCard('machine', 'This computer needs', o.machineNeeds, 'Settings and pins that belong to this computer rather than one project, like the setting that keeps a program working with this graphics card.'),
+    suggestCard(),
+    addCard(),
+    h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'Writing it down'),
+      h('div', { class: 'k-hint' }, 'SETUP.md says what is needed and why; setup.ps1 sets up a Windows computer, skipping whatever is already there.'),
+      h('div', { class: 'k-btns' },
+        h('button', { disabled: !o.project, onclick: () => act(async () => { const r = await prism.call('write'); await prism.call('openFile', { path: r.files[0] }) }, 'Written') }, 'Write SETUP.md and setup.ps1'),
+        h('button', { class: 'ghost', disabled: !o.project, onclick: () => act(() => prism.call('askAgent', { text: 'Fill in the setup for this project: read its docs, scripts and history, and with setup_record give every need in .prism/setup.json a reason (why) and a fix, and record anything else it really needs, including versions or settings that were pinned because something broke. Record things that belong to this computer rather than the project with scope "machine".' }), 'Asked Prism') }, 'Ask Prism to fill in the reasons'))),
+    h('div', { class: 'k-hint' }, `This computer: ${o.facts.os}${o.facts.gpu ? `, ${o.facts.gpu}` : ''}.`))
+}
+
+function listCard(scope, title, list, hint) {
+  if (scope === 'project' && !o.project) return h('div', { class: 'k-card' }, h('h3', {}, title), h('div', { class: 'k-hint' }, hint))
+  return h('div', { class: 'k-card' },
+    h('h3', {}, title),
+    h('div', { class: 'k-hint' }, hint),
+    list.needs.length ? list.needs.map((n) => needRow(scope, n)) : h('div', { class: 'k-hint', style: { marginTop: '6px' } }, scope === 'project' ? 'Nothing recorded yet. "Find what it needs" below is a good start.' : 'Nothing recorded for this computer yet.'))
+}
+
+function needRow(scope, n) {
+  const r = resultFor(scope, n.name)
+  const fix = n.fixWindows ?? n.fix ?? ''
+  return h('div', { class: 'need' },
+    h('span', { class: 'k-dot ' + (r ? (r.ok ? 'ok' : 'bad') : '') }),
+    h('div', { class: 'k-grow' },
+      h('div', { class: 'k-row' }, h('b', {}, n.name), n.want ? h('span', { class: 'k-pill' }, n.want) : null, n.env ? h('span', { class: 'k-pill' }, 'setting') : n.path ? h('span', { class: 'k-pill' }, 'on disk') : null),
+      r ? h('span', { class: 'found', title: r.said }, r.said) : null,
+      n.why ? h('span', { class: 'why' }, n.why) : null,
+      r && !r.ok && fix ? h('div', { class: 'fixline' }, h('code', {}, fix), RUNNABLE.test(fix) ? h('button', { class: 'small primary', onclick: () => runFix(n, fix) }, 'Fix it') : null, h('button', { class: 'small', onclick: () => act(() => prism.call('askAgent', { text: `On this computer, "${n.name}" is not in place (${r.said}). It needs: ${n.want || 'to be there'}. ${n.why ? `Why: ${n.why}. ` : ''}Suggested fix: ${fix}. Sort it out, and check it with setup_check.` }), 'Asked Prism') }, 'Ask Prism')) : null),
+    h('button', { class: 'ghost small rm', title: 'Forget this one', onclick: async () => (await ask(`Forget "${n.name}"?`, 'Forget it')) && act(async () => { await prism.call('remove', { scope, name: n.name }); await load() }) }, '✕'))
+}
+
+async function runFix(n, fix) {
+  if (!(await ask(`Run this now?\n\n${fix}`, 'Run it'))) return
+  toast('Working on it…')
+  const r = await act(() => prism.call('fix', { command: fix }))
+  if (!r) return
+  if (r.code !== 0) toast('It did not finish cleanly. See what it said in the log.')
+  await check()
+}
+
+function suggestCard() {
+  if (!o.project) return null
+  if (!suggestions) return h('div', { class: 'k-btns' }, h('button', { onclick: async (e) => { e.target.disabled = true; e.target.textContent = 'Looking…'; suggestions = await act(() => prism.call('detect')) ?? null; render() } }, 'Find what this project needs'), h('button', { class: 'ghost', onclick: () => { adding = { scope: 'project', kind: 'check' }; render() } }, 'Add one by hand'))
+  if (!suggestions.length) return h('div', { class: 'k-hint' }, 'Nothing new found in the project\u2019s files.')
+  const picked = new Set(suggestions.map((_, i) => i))
+  return h('div', { class: 'k-card k-col' },
+    h('h3', {}, 'Found in the project\u2019s files'),
+    suggestions.map((s, i) => h('label', { class: 'k-check' }, h('input', { type: 'checkbox', checked: true, onchange: (e) => e.target.checked ? picked.add(i) : picked.delete(i) }), h('span', {}, h('b', {}, s.name), s.want ? ` (${s.want})` : '', h('span', { class: 'k-hint' }, ` · now ${s.now}`)))),
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary', onclick: () => act(async () => { await prism.call('add', { scope: 'project', needs: suggestions.filter((_, i) => picked.has(i)).map(({ now, ok, ...n }) => n) }); suggestions = null; await load(); await check() }, 'Recorded') }, 'Record the ticked ones'),
+      h('button', { class: 'ghost', onclick: () => { suggestions = null; render() } }, 'Not now')))
+}
+
+function addCard() {
+  if (!adding) return null
+  const a = adding
+  const field = (key, label, ph, mono) => h('label', { class: 'k-field' }, h('span', {}, label), h('input', { class: mono ? 'k-mono' : '', placeholder: ph ?? '', value: a[key] ?? '', oninput: (e) => (a[key] = e.target.value) }))
+  return h('div', { class: 'k-card k-col' },
+    h('h3', {}, 'Add a need'),
+    h('div', { class: 'k-btns' },
+      ['check', 'env', 'path'].map((k) => h('button', { class: 'small' + (a.kind === k ? ' primary' : ''), onclick: () => { a.kind = k; render() } }, { check: 'A program', env: 'A setting', path: 'A folder or file' }[k])),
+      h('span', { class: 'k-grow' }),
+      h('label', { class: 'k-check' }, h('input', { type: 'checkbox', checked: a.scope === 'machine', onchange: (e) => (a.scope = e.target.checked ? 'machine' : 'project') }), 'It belongs to this computer')),
+    h('div', { class: 'form' },
+      field('name', 'Name', 'Node.js'),
+      a.kind === 'check' ? field('check', 'A command that prints its version', 'node --version', true) : a.kind === 'env' ? field('env', 'The setting\u2019s name', 'OLLAMA_LLM_LIBRARY', true) : field('path', 'Where it should be', 'C:/AI/Hunyuan3D-2.1', true),
+      a.kind !== 'path' ? field('want', a.kind === 'env' ? 'Its value' : 'Version, like >=22 or 21.x', a.kind === 'env' ? 'cuda_v12' : '>=22') : null,
+      field('fix', 'How to get it', 'winget install …', true)),
+    field('why', 'Why it is needed', 'what breaks without it'),
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary', onclick: () => { if (!a.name) return toast('Give it a name'); const need = { name: a.name, why: a.why, fix: a.fix, want: a.want }; need[a.kind] = a[a.kind]; act(async () => { await prism.call('add', { scope: a.scope, need }); adding = null; await load(); await check() }, 'Recorded') } }, 'Record it'),
+      h('button', { class: 'ghost', onclick: () => { adding = null; render() } }, 'Cancel')))
+}
+
+async function check() {
+  if (checking) return
+  checking = true
+  $('checkBtn').disabled = true
+  $('checkBtn').textContent = 'Checking…'
+  try {
+    o.lastCheck = await prism.call('check')
+    render()
+  } catch (e) {
+    toast(String(e.message ?? e))
+  } finally {
+    checking = false
+    $('checkBtn').disabled = false
+    $('checkBtn').textContent = 'Check this computer'
+  }
+}
+
+$('checkBtn').onclick = check
+prism.on('check', (c) => { if (o) { o.lastCheck = c; render() } })
+prism.on('changed', () => load())
+prism.ready(() => void load().then(() => { if (!o.lastCheck && (o.projectNeeds.needs.length || o.machineNeeds.needs.length)) check() }).catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e)))))
+</script>
+</body>
+</html>

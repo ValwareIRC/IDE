@@ -1,0 +1,33 @@
+{
+  "id": "release",
+  "name": "Release desk",
+  "description": "Put out a new version in one visible run: what is new, the new number, the builds, handing them over, installing, and putting an earlier version back.",
+  "agent": "Putting out a new version: release_status, then release_run (bump, build, hand over; deliver and install only when asked), release_put_back to go back to an earlier one, release_hand_over to give the user the files. Prism itself is released this way too.",
+  "intro": {
+    "icon": "rocket",
+    "colour": "#f6c58f",
+    "tagline": "Turns finished work into a new version, in one go.",
+    "what": "When you want to give people a new version of something, there are lots of little steps in a strict order: give it a new number, build it, find the file it made, hand it over, install it. The release desk does them all in order, shows each step as it happens, and keeps the earlier versions so you can go back.",
+    "helps": [
+      "Nothing gets forgotten or done in the wrong order.",
+      "You can see exactly where it is up to, and what went wrong if a step fails.",
+      "If the new version is bad, \"Put back\" installs the one before."
+    ],
+    "example": "You press \"Release 0.24.1\". It writes the new number, builds the installer, and shows you the file it made with a \"Give it to me\" button, so it lands on your phone."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "shell": true,
+    "workspace": "write"
+  },
+  "widget": {
+    "title": "Release desk",
+    "ratio": 0.7,
+    "actions": [
+      {
+        "label": "Stop",
+        "call": "stop"
+      }
+    ]
+  }
+}

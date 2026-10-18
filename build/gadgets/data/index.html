@@ -1,0 +1,274 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .split { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); gap: 12px; align-items: start; }
+  @media (max-width: 620px) { .split { grid-template-columns: minmax(0, 1fr); } }
+  textarea.sql, textarea.body { width: 100%; min-height: 110px; font-family: var(--font-mono, monospace); font-size: 12.5px; resize: vertical; }
+  .results { max-height: 52vh; overflow: auto; border: 1px solid rgba(255,255,255,.06); border-radius: 8px; }
+  .results td { white-space: nowrap; font-family: var(--font-mono, monospace); font-size: 11.5px; }
+  .results td.null { color: var(--text-3, #6f7689); font-style: italic; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.1); cursor: pointer; background: none; color: var(--text-2, #a7aec0); }
+  .chip:hover { color: var(--text, #e9ecf4); border-color: rgba(255,255,255,.22); }
+  .hist { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 12px; min-width: 0; }
+  .hist code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, monospace); }
+  .reqline { display: flex; gap: 6px; flex-wrap: nowrap; min-width: 0; }
+  .reqline select { flex: none; }
+  .reqline input { flex: 1; min-width: 0; font-family: var(--font-mono, monospace); }
+  .hdr { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(100px, 2fr) auto; gap: 6px; }
+  pre.resp { max-height: 48vh; }
+  .status.ok { color: var(--mint, #7ee2b8); } .status.warn { color: var(--amber, #f5c97a); } .status.bad { color: var(--rose, #f59ab0); }
+  .pending pre { margin: 0; }
+</style>
+</head>
+<body>
+<div class="k-app">
+  <div class="k-top"><span class="k-title">Data</span></div>
+  <div id="tabs"></div>
+  <div class="k-body" id="body"><div class="k-empty">Reading the project…</div></div>
+</div>
+<script>
+const { h, mount, ago, dur, bytes, toast, act, ask } = kit
+let o = null
+let tab = 'db'
+let current = null
+let tableList = []
+let sql = ''
+let result = null
+let running = false
+let req = { name: '', method: 'GET', url: '', headers: [], body: '' }
+let resp = null
+let respTab = 'body'
+const $ = (id) => document.getElementById(id)
+
+async function load() {
+  o = await prism.call('overview')
+  if (!current && o.config.connections.length) await pick(o.config.connections[0].name, false)
+  render()
+}
+
+function render() {
+  if (!o?.project) return mount('#body', h('div', { class: 'k-empty' }, 'Open a project to use its databases and requests.'))
+  mount('#tabs', kit.tabs([['db', 'Databases'], ['api', 'Requests'], ['log', 'What ran']], tab, (t) => { tab = t; render() }))
+  mount('#body', pendingCards(), tab === 'db' ? dbTab() : tab === 'api' ? apiTab() : logTab())
+}
+
+// ---------------------------------------------------------------- held for a yes
+
+function pendingCards() {
+  return (o.pending ?? []).map((p) => h('div', { class: 'k-ask pending' },
+    h('b', {}, p.kind === 'query' ? `${p.by === 'you' ? 'Confirm' : 'Prism asks'}: run this on ${p.what.connection}? It changes data.` : `${p.by === 'you' ? 'Confirm' : 'Prism asks'}: send ${p.what.method} to ${p.what.url}?`),
+    h('pre', { class: 'k-log' }, p.kind === 'query' ? p.what.sql : (p.what.body || '(no body)')),
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary', onclick: () => act(() => prism.call('decide', { id: p.id, yes: true })) }, p.kind === 'query' ? 'Run it' : 'Send it'),
+      h('button', { onclick: () => act(() => prism.call('decide', { id: p.id, yes: false })) }, 'Not now'))))
+}
+
+// ---------------------------------------------------------------- databases
+
+async function pick(name, draw = true) {
+  current = name
+  tableList = []
+  result = null
+  if (draw) render()
+  try {
+    tableList = await prism.call('tables', { name })
+  } catch (e) {
+    tableList = []
+    result = { error: String(e.message ?? e) }
+  }
+  if (draw) render()
+}
+
+function dbTab() {
+  const conns = o.config.connections
+  const unconnected = o.found.filter((p) => !conns.some((c) => c.path === p))
+  return h('div', { class: 'split' },
+    h('div', { class: 'k-col' },
+      h('div', { class: 'k-list' }, conns.map((c) => h('div', { class: 'k-item click' + (current === c.name ? ' on' : ''), onclick: () => pick(c.name) },
+        h('span', { class: 'k-dot ok' }), h('span', { class: 'k-grow k-trunc' }, c.name), h('span', { class: 'k-hint' }, { sqlite: 'SQLite', postgres: 'Postgres', mysql: 'MySQL' }[c.kind])))),
+      unconnected.length ? h('div', { class: 'k-col' }, h('div', { class: 'k-hint' }, 'Found in the project:'), unconnected.map((p) => h('div', { class: 'k-item click', onclick: () => act(async () => { o.config = await prism.call('addConnection', { kind: 'sqlite', path: p }); await pick(p.split('/').pop()) }) }, h('span', { class: 'k-trunc k-grow' }, p), h('span', { class: 'accent k-hint' }, 'connect')))) : null,
+      addConnection()),
+    h('div', { class: 'k-col' }, current ? queryPane() : h('div', { class: 'k-empty' }, conns.length ? 'Pick a database.' : 'No databases connected yet. Connect a SQLite file, or a PostgreSQL or MySQL server.')))
+}
+
+function addConnection() {
+  const d = { kind: 'sqlite', name: '', path: '', url: '' }
+  const box = h('details', { class: 'k-more' }, h('summary', {}, 'Connect a database'))
+  const fields = h('div', { class: 'k-col', style: { marginTop: '6px' } })
+  const draw = () => mount(fields,
+    h('select', { onchange: (e) => { d.kind = e.target.value; draw() } }, [['sqlite', 'SQLite file'], ['postgres', 'PostgreSQL'], ['mysql', 'MySQL']].map(([v, l]) => h('option', { value: v, selected: d.kind === v }, l))),
+    h('input', { placeholder: 'A name for it', value: d.name, oninput: (e) => (d.name = e.target.value) }),
+    d.kind === 'sqlite'
+      ? h('input', { class: 'k-mono', placeholder: 'data/app.db', value: d.path, oninput: (e) => (d.path = e.target.value) })
+      : h('input', { class: 'k-mono', placeholder: d.kind === 'postgres' ? 'postgres://user:{secret:DB_PASSWORD}@host/db' : 'mysql://user:{secret:DB_PASSWORD}@host/db', value: d.url, oninput: (e) => (d.url = e.target.value) }),
+    d.kind !== 'sqlite' ? h('div', { class: 'k-hint' }, 'Write {secret:NAME} for the password; set its value under Requests > Secrets. It is kept encrypted, never in the file.') : null,
+    d.kind !== 'sqlite' && !o.addons[d.kind === 'postgres' ? 'pg' : 'mysql2'] ? h('button', { class: 'small', onclick: async (e) => { e.target.disabled = true; e.target.textContent = 'Getting it…'; await act(() => prism.call('getAddon', { name: d.kind === 'postgres' ? 'pg' : 'mysql2' }), 'Ready'); await load() } }, `Get the ${d.kind === 'postgres' ? 'PostgreSQL' : 'MySQL'} add-on`) : null,
+    h('button', { class: 'primary small', onclick: () => act(async () => { o.config = await prism.call('addConnection', d); await pick(d.name || d.path.split('/').pop()) }, 'Connected') }, 'Connect'))
+  draw()
+  box.appendChild(fields)
+  return box
+}
+
+function queryPane() {
+  const conn = o.config.connections.find((c) => c.name === current)
+  const ta = h('textarea', { class: 'sql', spellcheck: 'false', placeholder: 'SELECT * FROM …', value: sql, oninput: (e) => (sql = e.target.value), onkeydown: (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runIt() } })
+  return [
+    h('div', { class: 'k-row' }, h('b', { class: 'k-grow k-trunc' }, conn?.name), h('span', { class: 'k-hint k-trunc' }, conn?.path ?? ''), h('button', { class: 'ghost small', onclick: async () => (await ask(`Forget the connection “${current}”? The database itself is not touched.`, 'Forget it')) && act(async () => { o.config = await prism.call('removeConnection', { name: current }); current = null; render() }) }, 'Forget')),
+    tableList.length ? h('div', { class: 'chips' }, tableList.map((t) => h('button', { class: 'chip', title: t.type === 'view' ? 'a view' : 'a table', onclick: () => { sql = `SELECT * FROM ${/^[\w.]+$/.test(t.name) ? t.name : `"${t.name}"`} LIMIT 200`; runIt() } }, t.name))) : null,
+    ta,
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary', disabled: running, onclick: runIt }, running ? 'Running…' : 'Run'),
+      h('span', { class: 'k-hint' }, 'Ctrl+Enter. Anything that changes data asks first.'),
+      h('span', { class: 'k-grow' }),
+      h('button', { class: 'small ghost', onclick: () => act(async () => { sql = await prism.call('schema', { name: current }); render() }) }, 'Show the schema')),
+    resultView()
+  ]
+}
+
+async function runIt() {
+  if (!sql.trim() || running) return
+  const reads = await prism.call('readsOnly', { sql })
+  if (!reads && !(await ask(`This changes data in ${current}:\n\n${sql.slice(0, 600)}`, 'Run it'))) return
+  running = true
+  render()
+  try {
+    result = await prism.call('query', { name: current, sql, confirmed: !reads })
+  } catch (e) {
+    result = { error: String(e.message ?? e) }
+  } finally {
+    running = false
+    render()
+  }
+}
+
+function cell(v) {
+  if (v == null) return h('td', { class: 'null' }, 'NULL')
+  const s = typeof v === 'object' ? JSON.stringify(v) : String(v)
+  return h('td', { title: s.length > 60 ? s.slice(0, 2000) : null }, s.length > 120 ? s.slice(0, 117) + '…' : s)
+}
+
+function resultView() {
+  if (!result) return null
+  if (result.error) return h('div', { class: 'k-card bad-text', style: { whiteSpace: 'pre-wrap' } }, result.error)
+  if (result.declined) return h('div', { class: 'k-hint' }, 'Not run.')
+  if (!result.columns?.length) return h('div', { class: 'k-hint ok-text' }, `Done in ${dur(result.ms)}. ${result.changed} row${result.changed === 1 ? '' : 's'} changed.`)
+  return [
+    h('div', { class: 'k-hint' }, `${result.rows.length}${result.more ? '+' : ''} row${result.rows.length === 1 ? '' : 's'} in ${dur(result.ms)}${result.more ? ' (the first 500)' : ''}`),
+    h('div', { class: 'results' }, h('table', { class: 'k-table' }, h('tr', {}, result.columns.map((c) => h('th', {}, c))), result.rows.map((r) => h('tr', {}, result.columns.map((c) => cell(r[c]))))))
+  ]
+}
+
+// ---------------------------------------------------------------- requests
+
+function apiTab() {
+  const saved = o.config.requests
+  return h('div', { class: 'split' },
+    h('div', { class: 'k-col' },
+      h('div', { class: 'k-btns' }, h('button', { class: 'small', onclick: () => { req = { name: '', method: 'GET', url: '', headers: [], body: '' }; resp = null; render() } }, 'New'), h('button', { class: 'small', onclick: pasteCurl }, 'Paste a curl command')),
+      saved.length ? h('div', { class: 'k-list' }, saved.map((r) => h('div', { class: 'k-item click' + (req.name === r.name ? ' on' : ''), onclick: () => { req = JSON.parse(JSON.stringify(r)); resp = null; render() } }, h('span', { class: 'k-pill' }, r.method), h('span', { class: 'k-grow k-trunc' }, r.name)))) : h('div', { class: 'k-hint' }, 'Saved requests appear here.'),
+      varsCard()),
+    h('div', { class: 'k-col' }, requestEditor(), responseView()))
+}
+
+function requestEditor() {
+  return [
+    h('div', { class: 'reqline' },
+      h('select', { onchange: (e) => (req.method = e.target.value) }, ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].map((m) => h('option', { selected: req.method === m }, m))),
+      h('input', { placeholder: 'https://… or {{base}}/path', value: req.url, oninput: (e) => (req.url = e.target.value), onkeydown: (e) => { if (e.key === 'Enter') sendIt() } }),
+      h('button', { class: 'primary', onclick: sendIt }, 'Send')),
+    h('details', { class: 'k-more', open: req.headers.length > 0 || null }, h('summary', {}, `Headers${req.headers.length ? ` (${req.headers.length})` : ''}`),
+      h('div', { class: 'k-col', style: { marginTop: '6px' } },
+        req.headers.map((x, i) => h('div', { class: 'hdr' }, h('input', { placeholder: 'Name', value: x.name, oninput: (e) => (x.name = e.target.value) }), h('input', { class: 'k-mono', placeholder: 'Value', value: x.value, oninput: (e) => (x.value = e.target.value) }), h('button', { class: 'ghost small', onclick: () => { req.headers.splice(i, 1); render() } }, '✕'))),
+        h('div', {}, h('button', { class: 'small', onclick: () => { req.headers.push({ name: '', value: '' }); render() } }, 'Add a header')))),
+    !['GET', 'HEAD'].includes(req.method) ? h('textarea', { class: 'body', placeholder: 'The body, like {"name": "value"}', value: req.body, oninput: (e) => (req.body = e.target.value) }) : null,
+    h('div', { class: 'k-btns' },
+      h('input', { placeholder: 'Name it to save it', value: req.name, oninput: (e) => (req.name = e.target.value), style: { flex: '1', minWidth: '120px' } }),
+      h('button', { class: 'small', onclick: () => act(async () => { o.config = await prism.call('saveRequest', { request: req }); render() }, 'Saved') }, 'Save'),
+      req.name && o.config.requests.some((r) => r.name === req.name) ? h('button', { class: 'small ghost', onclick: () => act(async () => { o.config = await prism.call('removeRequest', { name: req.name }); render() }) }, 'Delete') : null)
+  ]
+}
+
+async function sendIt() {
+  if (!req.url.trim()) return toast('Which address?')
+  const changes = !['GET', 'HEAD', 'OPTIONS'].includes(req.method)
+  const local = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?(\/|$)/i.test(req.url)
+  if (changes && !local && !(await ask(`Send ${req.method} to ${req.url}? It may change something there.`, 'Send it'))) return
+  resp = { sending: true }
+  render()
+  try {
+    resp = await prism.call('send', { request: req, confirmed: changes && !local })
+  } catch (e) {
+    resp = { error: String(e.message ?? e) }
+  }
+  render()
+}
+
+function pretty(text) {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    return text
+  }
+}
+
+function responseView() {
+  if (!resp) return null
+  if (resp.sending) return h('div', { class: 'k-hint' }, 'Sending…')
+  if (resp.error) return h('div', { class: 'k-card bad-text' }, resp.error)
+  if (resp.declined) return h('div', { class: 'k-hint' }, 'Not sent.')
+  const cls = resp.status < 300 ? 'ok' : resp.status < 400 ? 'warn' : 'bad'
+  return h('div', { class: 'k-card k-col' },
+    h('div', { class: 'k-row' }, h('b', { class: 'status ' + cls }, `${resp.status} ${resp.statusText}`), h('span', { class: 'k-hint' }, `${dur(resp.ms)} · ${bytes(resp.size)}${resp.type ? ` · ${resp.type.split(';')[0]}` : ''}`), h('span', { class: 'k-grow' }), h('button', { class: 'small ghost', onclick: () => kit.copy(resp.body ?? '') }, 'Copy')),
+    kit.tabs([['body', 'Body'], ['headers', 'Headers']], respTab, (t) => { respTab = t; render() }),
+    respTab === 'body' ? h('pre', { class: 'k-log resp' }, resp.body != null ? pretty(resp.body) : resp.binary) : h('pre', { class: 'k-log resp' }, Object.entries(resp.headers).map(([k, v]) => `${k}: ${v}`).join('\n')))
+}
+
+function pasteCurl() {
+  const ta = h('textarea', { class: 'body', placeholder: "curl 'https://…' -H 'Authorization: …'" })
+  const box = h('div', { class: 'k-modal-back' }, h('div', { class: 'k-modal' }, h('div', {}, 'Paste a curl command (from a browser’s developer tools or an API’s docs)'), ta,
+    h('div', { class: 'k-btns' }, h('button', { onclick: () => box.remove() }, 'Cancel'), h('button', { class: 'primary', onclick: () => act(async () => { const r = await prism.call('fromCurl', { text: ta.value }); box.remove(); req = { name: '', ...r }; resp = null; render() }) }, 'Use it'))))
+  document.body.appendChild(box)
+  ta.focus()
+}
+
+function varsCard() {
+  const vars = Object.entries(o.config.vars)
+  let name = ''
+  let value = ''
+  let secret = false
+  return h('details', { class: 'k-more' }, h('summary', {}, 'Variables and secrets'),
+    h('div', { class: 'k-col', style: { marginTop: '6px' } },
+      h('div', { class: 'k-hint' }, 'Write {{name}} in an address, header or body for a variable, and {secret:NAME} for a secret (kept encrypted, never shown).'),
+      vars.map(([k, v]) => h('div', { class: 'k-row nowrap' }, h('code', { class: 'k-trunc k-grow' }, `{{${k}}} = ${v}`), h('button', { class: 'ghost small', onclick: () => act(async () => { o.config = await prism.call('setVar', { name: k, value: '' }); render() }) }, '✕'))),
+      h('input', { placeholder: 'Name, like base or TOKEN', oninput: (e) => (name = e.target.value) }),
+      h('input', { type: 'password', placeholder: 'Value', oninput: (e) => (value = e.target.value) }),
+      h('label', { class: 'k-check' }, h('input', { type: 'checkbox', onchange: (e) => (secret = e.target.checked) }), 'It is a secret'),
+      h('button', { class: 'small', onclick: () => { if (!name) return toast('Give it a name'); act(async () => { if (secret) await prism.call('setSecret', { name, value }); else o.config = await prism.call('setVar', { name, value }); render() }, secret ? 'Kept, encrypted' : 'Saved') } }, 'Keep it')))
+}
+
+// ---------------------------------------------------------------- what ran
+
+function logTab() {
+  const list = o.history ?? []
+  if (!list.length) return h('div', { class: 'k-empty' }, 'Every query and request, yours and Prism’s, is listed here.')
+  return h('div', { class: 'k-card' }, list.map((x) => h('div', { class: 'hist' },
+    h('span', { class: 'k-pill ' + (x.by === 'you' ? '' : 'accent') }, x.by === 'you' ? 'you' : 'Prism'),
+    h('code', { title: x.sql ?? x.url }, x.kind === 'query' ? `${x.connection}: ${x.sql}` : `${x.method} ${x.url}`),
+    h('span', { class: 'k-hint' }, x.outcome),
+    h('span', { class: 'k-hint' }, ago(x.at)))))
+}
+
+prism.on('pending', (p) => { if (o) { o.pending = p; render() } })
+prism.on('history', (list) => { if (o) { o.history = list; if (tab === 'log') render() } })
+prism.on('config', (c) => { if (o) { o.config = c } })
+prism.ready(() => void load().catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e)))))
+</script>
+</body>
+</html>

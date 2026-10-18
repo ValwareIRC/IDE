@@ -1,0 +1,24 @@
+{
+  "id": "safety",
+  "name": "Safety",
+  "description": "Dependencies and safety: updates that are safe to take, known security holes, licences and the credits you owe, and secrets about to be committed by mistake.",
+  "agent": "Dependencies and safety: safety_check (updates, known holes, licences, secrets about to be committed), safety_credit to record a credit owed for data, fonts or pictures (like OpenStreetMap's ODbL), safety_notices to write THIRD-PARTY-NOTICES.md. Check before a release, and before adding a dependency.",
+  "intro": {
+    "icon": "shield",
+    "colour": "#9ee6c2",
+    "tagline": "Keeps an eye on the outside code your project uses.",
+    "what": "Projects use lots of code written by other people (packages). This checks whether any of them have newer versions worth taking, whether any have known security holes, what their licences ask of you, and stops you from accidentally saving a password or key into git.",
+    "helps": [
+      "You know which updates are safe and which might break things.",
+      "You hear about security holes in what you use.",
+      "A secret can never slip into your project’s history by mistake."
+    ],
+    "example": "You turn on \"Guard every commit\". Later you paste an API key into a file and try to commit it: the commit is stopped with a note saying which line has the key."
+  },
+  "backend": "backend.mjs",
+  "permissions": {
+    "shell": true,
+    "network": true,
+    "workspace": "write"
+  }
+}

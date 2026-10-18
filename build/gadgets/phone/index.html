@@ -1,0 +1,234 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .layout { display: grid; grid-template-columns: minmax(200px, 360px) minmax(0, 1fr); gap: 12px; align-items: start; }
+  @media (max-width: 640px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .screen { position: relative; display: flex; justify-content: center; background: rgba(0,0,0,.35); border-radius: 12px; min-height: 160px; overflow: hidden; touch-action: none; }
+  .screen img { max-width: 100%; max-height: 68vh; display: block; cursor: crosshair; user-select: none; -webkit-user-drag: none; }
+  .screen .k-empty { align-self: center; }
+  .dotmark { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; border: 2px solid var(--accent, #8ad8ff); pointer-events: none; animation: fade .6s forwards; }
+  @keyframes fade { to { opacity: 0; transform: scale(1.8); } }
+  .steps-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .code { font-size: 22px; letter-spacing: 6px; width: 9.5ch; text-align: center; font-family: var(--font-mono, monospace); }
+  .act { display: flex; gap: 8px; font-size: 12.5px; padding: 3px 0; min-width: 0; }
+  .act .who { flex: none; width: 52px; color: var(--text-2, #a7aec0); }
+  .act .who.prism { color: var(--accent, #8ad8ff); }
+  .act .when { flex: none; color: var(--text-3, #6f7689); font-size: 11.5px; }
+  label.k-check { display: flex; gap: 8px; align-items: center; font-size: 12.5px; cursor: pointer; }
+  .loglines { max-height: 52vh; }
+  .loglines .e { color: var(--rose, #f59ab0); }
+  .loglines .w { color: var(--amber, #f5c97a); }
+</style>
+</head>
+<body>
+<div class="k-app">
+  <div class="k-top">
+    <span class="k-title">Phone</span>
+    <span class="k-pill" id="who" hidden></span>
+    <button class="ghost small" id="refresh">Refresh</button>
+  </div>
+  <div class="k-body" id="body"><div class="k-empty">Looking for the phone…</div></div>
+</div>
+<script>
+const { h, mount, bytes, ago, toast, act, ask } = kit
+let o = null
+let tab = 'app'
+let shot = null
+let live = false
+let liveTimer = null
+let busyShot = false
+let logState = { following: false, mode: 'app', lines: [] }
+const $ = (id) => document.getElementById(id)
+
+async function load() {
+  o = await prism.call('overview')
+  logState = o.log ?? logState
+  render()
+  if (o.device && !shot) refreshShot()
+}
+
+function render() {
+  const pill = $('who')
+  pill.hidden = !o?.device
+  if (o?.device) {
+    pill.className = 'k-pill ok'
+    pill.textContent = `${o.device.model} · Android ${o.device.android}${o.device.battery != null ? ` · ${o.device.battery}%` : ''}`
+  }
+  if (!o) return
+  if (!o.tools) return mount('#body', noTools())
+  if (!o.device) return mount('#body', pairing())
+  mount('#body', h('div', { class: 'layout' }, screenCol(), sideCol()))
+}
+
+function noTools() {
+  return h('div', { class: 'k-card k-col' },
+    h('h3', {}, 'The Android tools are not on this computer'),
+    h('div', { class: 'k-hint' }, 'Prism talks to the phone through adb, Android’s own tool for this. It is free and small.'),
+    h('div', { class: 'k-btns' }, h('button', { class: 'primary', onclick: async (e) => { e.target.disabled = true; e.target.textContent = 'Installing…'; const r = await act(() => prism.call('installTools')); if (r && !r.ok) toast('It did not install. See the log.'); load() } }, 'Install them')))
+}
+
+function pairing() {
+  let code = ''
+  let address = ''
+  const doPair = async (btn) => {
+    btn.disabled = true
+    btn.textContent = 'Pairing…'
+    const r = await act(() => prism.call('pair', { code, address }), 'Paired')
+    btn.disabled = false
+    btn.textContent = 'Pair'
+    if (r) load()
+  }
+  const pairBtn = h('button', { class: 'primary', onclick: (e) => doPair(e.target) }, 'Pair')
+  return h('div', { class: 'k-col' },
+    o.error ? h('div', { class: 'k-hint bad-text' }, o.error) : null,
+    h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'Connect your phone over Wi-Fi'),
+      h('ol', { class: 'steps-list' },
+        h('li', {}, 'On the phone, open ', h('b', {}, 'Settings → Developer options → Wireless debugging'), ' and turn it on. The phone and this computer need to be on the same Wi-Fi.',
+          h('div', { class: 'k-hint' }, 'No Developer options? Settings → About phone, then tap Build number seven times.')),
+        h('li', {}, 'Paired before? ', h('button', { class: 'small', onclick: async (e) => { e.target.disabled = true; const r = await act(() => prism.call('reconnect')); e.target.disabled = false; if (r) toast(r.split('\n')[0]); load() } }, 'Reconnect')),
+        h('li', {}, 'First time: tap ', h('b', {}, 'Pair device with pairing code'), ' on the phone, then type the six numbers it shows:',
+          h('div', { class: 'k-row', style: { marginTop: '8px' } },
+            h('input', { class: 'code', inputmode: 'numeric', maxlength: 6, placeholder: '······', oninput: (e) => { code = e.target.value }, onkeydown: (e) => { if (e.key === 'Enter') doPair(pairBtn) } }),
+            pairBtn),
+          h('details', { class: 'k-more', style: { marginTop: '8px' } },
+            h('summary', {}, 'If it cannot find the phone'),
+            h('div', { class: 'k-field', style: { marginTop: '6px' } }, h('span', {}, 'The address under the code, like 192.168.1.20:37099'), h('input', { class: 'k-mono', oninput: (e) => { address = e.target.value } })))))),
+    o.devices?.length ? h('div', { class: 'k-card' }, h('h3', {}, 'Seen, but not ready'), o.devices.map((d) => h('div', { class: 'k-item' }, h('span', { class: 'k-dot warn' }), h('span', { class: 'k-grow k-trunc' }, d.model || d.serial), h('span', { class: 'k-hint' }, d.state === 'unauthorized' ? 'allow it on the phone' : d.state)))) : null)
+}
+
+// ---------------------------------------------------------------- the screen
+
+function screenCol() {
+  const img = shot ? h('img', { src: `data:${shot.mime};base64,${shot.base64}`, draggable: 'false' }) : null
+  const box = h('div', { class: 'screen' }, img ?? h('div', { class: 'k-empty' }, 'No picture yet'))
+  if (img) wireTouches(box, img)
+  let typed = ''
+  const typeIt = async () => {
+    if (!typed) return
+    await act(() => prism.call('act', { type: typed }))
+    typed = ''
+    input.value = ''
+    setTimeout(refreshShot, 400)
+  }
+  const input = h('input', { class: 'k-grow', placeholder: 'Type on the phone', oninput: (e) => { typed = e.target.value }, onkeydown: (e) => { if (e.key === 'Enter') typeIt() } })
+  const key = (k, label) => h('button', { class: 'small', onclick: async () => { await act(() => prism.call('act', { key: k })); setTimeout(refreshShot, 500) } }, label)
+  return h('div', { class: 'k-col' },
+    box,
+    h('div', { class: 'k-btns' },
+      key('back', 'Back'), key('home', 'Home'), key('recent', 'Apps'),
+      h('button', { class: 'small', onclick: refreshShot }, 'Refresh'),
+      h('label', { class: 'k-check' }, h('input', { type: 'checkbox', checked: live, onchange: (e) => setLive(e.target.checked) }), 'Live')),
+    h('div', { class: 'k-row nowrap' }, input, h('button', { class: 'small', onclick: typeIt }, 'Type')),
+    h('div', { class: 'k-hint' }, 'Click the picture to tap, drag on it to swipe.'))
+}
+
+function wireTouches(box, img) {
+  let start = null
+  const toPhone = (e) => {
+    const r = img.getBoundingClientRect()
+    return { x: ((e.clientX - r.left) / r.width) * img.naturalWidth, y: ((e.clientY - r.top) / r.height) * img.naturalHeight, cx: e.clientX - box.getBoundingClientRect().left, cy: e.clientY - box.getBoundingClientRect().top }
+  }
+  img.addEventListener('pointerdown', (e) => { start = { ...toPhone(e), t: Date.now() }; img.setPointerCapture(e.pointerId) })
+  img.addEventListener('pointerup', async (e) => {
+    if (!start) return
+    const end = toPhone(e)
+    const moved = Math.hypot(end.x - start.x, end.y - start.y)
+    const held = Date.now() - start.t
+    box.appendChild(h('div', { class: 'dotmark', style: { left: start.cx + 'px', top: start.cy + 'px' } }))
+    const s = start
+    start = null
+    if (moved > 30) await act(() => prism.call('act', { swipe: { from: { x: s.x, y: s.y }, to: { x: end.x, y: end.y }, ms: Math.min(1200, Math.max(120, held)) } }))
+    else if (held > 600) await act(() => prism.call('act', { longPress: { x: s.x, y: s.y } }))
+    else await act(() => prism.call('act', { tap: { x: s.x, y: s.y } }))
+    setTimeout(refreshShot, 450)
+  })
+}
+
+async function refreshShot() {
+  if (busyShot || !o?.device) return
+  busyShot = true
+  try {
+    shot = await prism.call('screen')
+    const img = document.querySelector('.screen img')
+    if (img) img.src = `data:${shot.mime};base64,${shot.base64}`
+    else render()
+  } catch (e) {
+    if (!live) toast(String(e.message ?? e))
+  } finally {
+    busyShot = false
+  }
+}
+
+function setLive(on) {
+  live = on
+  clearInterval(liveTimer)
+  if (on) liveTimer = setInterval(() => { if (!document.hidden) refreshShot() }, 1500)
+}
+
+// ---------------------------------------------------------------- app, log and what happened
+
+function sideCol() {
+  return h('div', { class: 'k-col' },
+    kit.tabs([['app', 'App'], ['log', 'Log'], ['activity', 'What happened']], tab, (t) => { tab = t; render() }),
+    tab === 'app' ? appTab() : tab === 'log' ? logTab() : activityTab())
+}
+
+function appTab() {
+  let id = o.appId ?? ''
+  return h('div', { class: 'k-col' },
+    h('div', { class: 'k-card k-col' },
+      h('div', { class: 'k-field' }, h('span', {}, 'The app'),
+        h('div', { class: 'k-row nowrap' },
+          h('input', { class: 'k-mono k-grow', value: id, placeholder: 'com.example.app', oninput: (e) => { id = e.target.value } }),
+          h('button', { class: 'small', onclick: () => act(async () => { o.appId = await prism.call('setApp', { id }) }, 'Saved') }, 'Save'))),
+      h('div', { class: 'k-btns' },
+        h('button', { onclick: async () => { await act(() => prism.call('openApp')); setTimeout(refreshShot, 1200) } }, 'Open it'),
+        h('button', { onclick: async () => { await act(() => prism.call('closeApp')); setTimeout(refreshShot, 600) } }, 'Close it'))),
+    h('div', { class: 'k-card k-col' },
+      h('h3', {}, 'Built here'),
+      o.apks.length ? o.apks.slice(0, 6).map((a, i) => h('div', { class: 'k-row' },
+        h('div', { class: 'k-grow' }, h('div', { class: 'k-trunc' }, a.name), h('div', { class: 'k-hint' }, `${bytes(a.size)} · ${ago(a.at)}`)),
+        h('button', { class: i === 0 ? 'primary small' : 'small', onclick: async (e) => { e.target.disabled = true; e.target.textContent = 'Installing…'; await act(() => prism.call('install', { path: a.path }), 'Installed'); e.target.disabled = false; e.target.textContent = 'Install' } }, 'Install')))
+        : h('div', { class: 'k-hint' }, 'No APKs in this project yet.')),
+    h('label', { class: 'k-check' },
+      h('input', { type: 'checkbox', checked: !o.agentOff, onchange: (e) => act(async () => { o.agentOff = !e.target.checked; await prism.call('setAgentOff', { off: o.agentOff }) }) }),
+      'Prism may use the phone when you ask it to'))
+}
+
+function logTab() {
+  const lines = logState.lines ?? []
+  const pre = h('pre', { class: 'k-log loglines' }, lines.map((l) => h('div', { class: / [EF]\//.test(l) ? 'e' : / W\//.test(l) ? 'w' : '' }, l)))
+  setTimeout(() => (pre.scrollTop = pre.scrollHeight), 0)
+  return h('div', { class: 'k-col' },
+    h('div', { class: 'k-btns' },
+      h('select', { onchange: (e) => { logState.mode = e.target.value; if (logState.following) act(() => prism.call('follow', { mode: logState.mode })) } },
+        [['app', 'This app'], ['errors', 'Errors, whole phone'], ['all', 'Everything']].map(([v, l]) => h('option', { value: v, selected: logState.mode === v }, l))),
+      logState.following
+        ? h('button', { class: 'small', onclick: () => act(() => prism.call('unfollow')) }, 'Stop following')
+        : h('button', { class: 'primary small', onclick: () => act(() => prism.call('follow', { mode: logState.mode })) }, 'Follow'),
+      h('button', { class: 'small', onclick: () => act(() => prism.call('clearLog')) }, 'Clear'),
+      lines.length ? h('button', { class: 'small', onclick: () => act(() => prism.call('sendLog', { lines: 120 }), 'Sent to Prism') }, 'Ask Prism about it') : null),
+    lines.length ? pre : h('div', { class: 'k-hint' }, logState.following ? 'Waiting for the app to say something…' : 'Follow the app’s log to see its messages and crashes here.'))
+}
+
+function activityTab() {
+  const list = o.activity ?? []
+  if (!list.length) return h('div', { class: 'k-hint' }, 'Nothing yet. Everything Prism does on the phone is listed here.')
+  return h('div', { class: 'k-card' }, list.map((a) => h('div', { class: 'act' }, h('span', { class: 'who' + (a.by === 'Prism' ? ' prism' : '') }, a.by), h('span', { class: 'k-grow' }, a.what), h('span', { class: 'when' }, ago(a.at)))))
+}
+
+prism.on('log', (l) => { logState = l; if (tab === 'log' && o?.device) render() })
+prism.on('activity', (list) => { if (o) { o.activity = list; if (tab === 'activity') render() } })
+prism.on('shot', (s) => { shot = s; const img = document.querySelector('.screen img'); if (img) img.src = `data:${s.mime};base64,${s.base64}`; else if (o?.device) render() })
+$('refresh').onclick = () => load().then(() => o?.device && refreshShot())
+prism.ready(() => void load().catch((e) => mount('#body', h('div', { class: 'k-empty bad-text' }, String(e.message ?? e)))))
+</script>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Decisions</title>
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .k-pill, .meta, .day { font-size: 12px !important; }
+  .search { display: flex; gap: 8px; align-items: center; }
+  .search input { flex: 1; min-width: 0; }
+  .day { font-size: 11.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-2, #a7aec0); margin: 14px 2px 6px; }
+  .d { border: 1px solid rgba(255,255,255,.07); border-left: 3px solid #c9b8f5; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; background: rgba(201,184,245,.035); }
+  .d.words { border-left-color: #8ad8ff; background: rgba(138,216,255,.03); }
+  .d.recorded { border-left-color: #f5c97a; background: rgba(245,201,122,.03); }
+  .d.old { border-left-color: #f59ab0; background: none; }
+  .d.old .ans { text-decoration: line-through; text-decoration-color: rgba(245,154,176,.7); }
+  .q { font-size: 13px; color: var(--text-2, #a7aec0); line-height: 1.4; }
+  .ans { font-size: 14px; font-weight: 500; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+  .ans.long { max-height: 7.5em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); cursor: pointer; }
+  .opts { display: flex; flex-wrap: wrap; gap: 4px; }
+  .opts .k-pill.picked { color: #ddd2ff; border-color: rgba(201,184,245,.6); background: rgba(201,184,245,.12); }
+  .opts .k-pill.not { border-style: dashed; }
+  .why { font-size: 12.5px; line-height: 1.45; padding: 6px 9px; border-radius: 8px; background: rgba(255,255,255,.035); }
+  .why b { font-weight: 500; color: var(--text-2, #a7aec0); }
+  .meta { display: flex; gap: 8px; align-items: center; color: var(--text-2, #a7aec0); flex-wrap: wrap; }
+  .meta .k-grow { min-width: 0; }
+  .d .tools { display: none; gap: 4px; }
+  .d:hover .tools, .d:focus-within .tools, .d.editing .tools { display: flex; }
+  .counts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .counts button.on { border-color: rgba(201,184,245,.6); background: rgba(201,184,245,.12); }
+  textarea { min-height: 54px; }
+</style>
+</head>
+<body>
+<main class="k-app">
+  <div class="k-top"><h1 class="k-title" style="margin:0;font-size:inherit">Decisions</h1><span class="k-grow" id="sub" style="color:var(--text-2,#a7aec0);font-size:13px"></span><button class="small" id="add">Add one</button></div>
+  <div class="k-body" id="body"><div class="k-empty">Opening the ledger…</div></div>
+</main>
+<script>
+const { h, mount, ago, act } = kit
+let o = null
+let words = ''
+let kind = 'all'
+let adding = false
+let editing = null
+const open = new Set()
+
+const KINDS = [['all', 'All'], ['choice', 'Picked from options'], ['words', 'Answered in words'], ['recorded', 'Written down'], ['changed', 'Changed since']]
+const fmtDay = (t) => new Date(t).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: new Date(t).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+const fmtTime = (t) => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+
+async function load() {
+  o = await act(() => prism.call('overview'))
+  if (o) render()
+}
+
+function matches(d) {
+  if (kind === 'changed' ? !d.changed : kind !== 'all' && d.kind !== kind) return false
+  if (!words) return true
+  const hay = `${d.question} ${d.answer} ${d.why ?? ''} ${(d.options ?? []).join(' ')} ${d.session?.title ?? ''}`.toLowerCase()
+  return words.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w))
+}
+
+function render() {
+  const all = o.decisions
+  document.getElementById('sub').textContent = all.length ? `${all.length} in this project` : ''
+  if (!o.project) return mount('#body', h('div', { class: 'k-empty' }, 'Open a project to see its decisions.'))
+  const shown = all.filter(matches)
+  const groups = []
+  for (const d of shown) {
+    const day = fmtDay(d.at)
+    if (groups[groups.length - 1]?.day !== day) groups.push({ day, list: [] })
+    groups[groups.length - 1].list.push(d)
+  }
+  mount('#body',
+    adding ? addCard() : null,
+    all.length ? h('div', { class: 'k-col' },
+      h('div', { class: 'search' }, h('input', { type: 'search', placeholder: 'Search questions, answers and reasons', value: words, 'aria-label': 'Search the decisions', oninput: (e) => { words = e.target.value; renderKeepFocus() } })),
+      h('div', { class: 'counts' }, KINDS.map(([id, label]) => {
+        const n = id === 'all' ? all.length : id === 'changed' ? all.filter((d) => d.changed).length : all.filter((d) => d.kind === id).length
+        return n || id === 'all' ? h('button', { class: 'small' + (kind === id ? ' on' : ''), onclick: () => { kind = id; render() } }, `${label} · ${n}`) : null
+      }))) : null,
+    !all.length && !adding ? h('div', { class: 'k-empty' },
+      h('b', {}, 'Nothing decided yet'),
+      h('div', { class: 'k-hint', style: { maxWidth: '420px' } }, 'The next time the agent asks you something, by buttons or just in words, your answer appears here with the question. You can also write one down yourself with Add one.')) : null,
+    all.length && !shown.length ? h('div', { class: 'k-empty' }, 'Nothing matches.') : null,
+    groups.flatMap((g) => [h('div', { class: 'day' }, g.day), ...g.list.map(entry)]))
+}
+
+function renderKeepFocus() {
+  const at = document.activeElement?.selectionStart
+  render()
+  const i = document.querySelector('.search input')
+  if (i) { i.focus(); if (at != null) i.setSelectionRange(at, at) }
+}
+
+function entry(d) {
+  const picked = new Set(d.kind === 'choice' ? d.answer.split(/\s*;\s*/) : [])
+  const long = d.answer.length > 320 && !open.has(d.id)
+  const how = d.kind === 'choice' ? 'You picked' : d.kind === 'words' ? 'You answered' : d.by === 'agent' ? 'The agent decided' : 'Decided'
+  return h('div', { class: `d ${d.kind}${d.changed ? ' old' : ''}${editing === d.id ? ' editing' : ''}` },
+    h('div', { class: 'q' }, d.question),
+    d.options?.length ? h('div', { class: 'opts' }, d.options.map((x) => h('span', { class: 'k-pill ' + (picked.has(x) ? 'picked' : 'not') }, x))) : null,
+    d.kind !== 'choice' || !d.options?.some((x) => picked.has(x)) ? h('div', { class: 'ans' + (long ? ' long' : ''), title: long ? 'Show all of it' : null, onclick: long ? () => { open.add(d.id); render() } : null }, d.answer) : null,
+    editing === d.id ? whyEditor(d) : d.why ? h('div', { class: 'why' }, h('b', {}, 'Why: '), d.why) : null,
+    d.changed ? h('div', { class: 'why' }, h('b', {}, `Changed ${ago(d.changed.at)}`), d.changed.note ? `: ${d.changed.note}` : '') : null,
+    h('div', { class: 'meta' },
+      h('span', {}, how),
+      h('span', {}, '·'),
+      h('span', {}, fmtTime(d.at)),
+      d.session?.title ? h('span', {}, '·') : null,
+      h('span', { class: 'k-trunc k-grow', title: d.session?.title || null }, d.session?.title ?? ''),
+      h('span', { class: 'tools' },
+        h('button', { class: 'small ghost', onclick: () => { editing = d.id; render() } }, d.why ? 'Change the reason' : 'Add a reason'),
+        h('button', { class: 'small ghost', onclick: () => toggleChanged(d) }, d.changed ? 'Still stands' : 'I changed my mind'))))
+}
+
+function whyEditor(d) {
+  const t = h('textarea', { 'aria-label': 'Why', placeholder: 'Why it was decided this way', value: d.why ?? '' })
+  setTimeout(() => t.focus(), 0)
+  return h('div', { class: 'k-col' }, t, h('div', { class: 'k-btns' },
+    h('button', { class: 'small primary', onclick: async () => { const r = await act(() => prism.call('why', { id: d.id, why: t.value }), 'Saved'); if (r) { o = r; editing = null; render() } } }, 'Save'),
+    h('button', { class: 'small', onclick: () => { editing = null; render() } }, 'Cancel')))
+}
+
+async function toggleChanged(d) {
+  let note = ''
+  if (!d.changed) {
+    const t = h('textarea', { placeholder: 'What you decide now (optional)' })
+    const ok = await new Promise((res) => {
+      const close = (v) => { back.remove(); res(v) }
+      const back = h('div', { class: 'k-modal-back', onclick: (e) => { if (e.target === back) close(false) } },
+        h('div', { class: 'k-modal k-col' },
+          h('div', { class: 'k-modal-text' }, 'Mark this as no longer what you want? It stays in the ledger, crossed out, so the story is kept.'),
+          t,
+          h('div', { class: 'k-btns' }, h('button', { onclick: () => close(false) }, 'Cancel'), h('button', { class: 'primary', onclick: () => close(true) }, 'Mark it changed'))))
+      document.body.appendChild(back)
+      t.focus()
+    })
+    if (!ok) return
+    note = t.value
+  }
+  const r = await act(() => prism.call('markChanged', { id: d.id, on: !d.changed, note }))
+  if (r) { o = r; render() }
+}
+
+function addCard() {
+  const q = h('input', { placeholder: 'What was decided, as a question (say, "Should the app have a dark mode?")', 'aria-label': 'The question' })
+  const a = h('textarea', { placeholder: 'The answer', 'aria-label': 'The answer' })
+  const w = h('textarea', { placeholder: 'Why (optional)', 'aria-label': 'Why' })
+  setTimeout(() => q.focus(), 0)
+  return h('div', { class: 'k-card k-col' },
+    h('h3', { style: { margin: 0 } }, 'Write a decision down'),
+    q, a, w,
+    h('div', { class: 'k-btns' },
+      h('button', { class: 'primary', onclick: async () => { const r = await act(() => prism.call('add', { question: q.value, answer: a.value, why: w.value }), 'Written down'); if (r) { o = r; adding = false; render() } } }, 'Save'),
+      h('button', { onclick: () => { adding = false; render() } }, 'Cancel')))
+}
+
+document.getElementById('add').onclick = () => { adding = !adding; render() }
+prism.on('changed', () => { if (!adding && !editing) load() })
+load()
+</script>
+</body>
+</html>

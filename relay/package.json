@@ -1,0 +1,10 @@
+{
+  "name": "prism-relay",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Passes sealed messages between a Prism and its phone app; cannot read them.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "ws": "^8.18.0" }
+}

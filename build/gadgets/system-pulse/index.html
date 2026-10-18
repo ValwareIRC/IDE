@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="prism-gadget://_sdk/base.css">
+<link rel="stylesheet" href="prism-gadget://_sdk/kit.css">
+<script src="prism-gadget://_sdk/prism.js"></script>
+<script src="prism-gadget://_sdk/kit.js"></script>
+<style>
+  .wrap { height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+  .mood { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; background: color-mix(in srgb, var(--m, var(--mint, #7ee2b8)) 10%, transparent); border: 1px solid color-mix(in srgb, var(--m, var(--mint, #7ee2b8)) 30%, transparent); }
+  .mood .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; background: var(--m, var(--mint, #7ee2b8)); animation: pulse 2.4s ease-out infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--m, #7ee2b8) 55%, transparent); } 70% { box-shadow: 0 0 0 10px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+  .mood b { font-size: 15px; display: block; }
+  .mood span { font-size: 12.5px; color: var(--text-2, #a7aec0); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .stat { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .label { font-size: 12.5px; font-weight: 600; }
+  .sub { font-size: 12px; color: var(--text-2, #a7aec0); }
+  .value { font-family: var(--font-mono, monospace); font-size: 26px; font-weight: 500; line-height: 1.1; white-space: nowrap; }
+  .value small { font-size: 13px; color: var(--text-3, #6f7689); }
+  .say { font-size: 12.5px; }
+  .bar { height: 8px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.08); }
+  .bar i { display: block; height: 100%; border-radius: 999px; transition: width .5s ease, background .5s ease; background: var(--mint, #7ee2b8); }
+  .bar i.warm { background: var(--amber, #f5c97a); } .bar i.hot { background: var(--rose, #f59ab0); }
+  .hist { display: flex; align-items: flex-end; gap: 2px; height: 56px; margin-top: 8px; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .hist i { flex: 1; min-width: 1px; min-height: 2px; border-radius: 2px 2px 0 0; background: linear-gradient(180deg, var(--accent, #8ad8ff), color-mix(in srgb, var(--accent, #8ad8ff) 20%, transparent)); }
+  .prow { display: grid; grid-template-columns: minmax(0, 1fr) 90px; align-items: center; gap: 10px; padding: 6px 4px; }
+  .pname { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pbar { height: 5px; border-radius: 999px; margin-top: 3px; background: rgba(255,255,255,.08); }
+  .pbar i { display: block; height: 100%; border-radius: 999px; background: color-mix(in srgb, var(--accent, #8ad8ff) 75%, transparent); }
+  .pnum { text-align: right; font-family: var(--font-mono, monospace); font-size: 12px; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="mood" id="mood"><span class="dot"></span><div><b id="moodTitle">Looking…</b><span id="moodText"></span></div></div>
+
+  <section class="stats">
+    <div class="k-card stat">
+      <div class="label">How hard it is thinking</div>
+      <div class="sub">The processor: the part that does the work.</div>
+      <div class="value" id="cpu">–</div>
+      <div class="bar"><i id="cpuBar"></i></div>
+      <div class="say" id="cpuSay"></div>
+    </div>
+    <div class="k-card stat">
+      <div class="label">How full the memory is</div>
+      <div class="sub">The space open programs work in. It empties when they close.</div>
+      <div class="value" id="mem">–</div>
+      <div class="bar"><i id="memBar"></i></div>
+      <div class="say" id="memSay"></div>
+    </div>
+  </section>
+
+  <section class="k-card">
+    <div class="k-row"><span class="label k-grow">Thinking over the last minute</span><span class="k-hint" id="cpuNow"></span></div>
+    <div class="hist" id="hist"></div>
+  </section>
+
+  <section class="k-card">
+    <div class="k-row">
+      <span class="label k-grow" id="listTitle">Busiest programs right now</span>
+      <button class="small" id="switch">Show memory instead</button>
+    </div>
+    <div class="sub" id="listSub" style="margin-top:4px">How much of the processor each program used in the last few seconds.</div>
+    <div id="procs" style="margin-top:6px"><div class="k-hint">Measuring…</div></div>
+    <div class="k-btns" style="margin-top:8px"><button class="small ghost" id="ask">Ask Prism if anything looks wrong</button></div>
+  </section>
+  <div class="k-hint" id="foot"></div>
+</div>
+<script>
+const { h, mount } = kit
+const hist = []
+let byMemory = false
+let s = null
+const el = (id) => document.getElementById(id)
+const heat = (v) => (v >= 85 ? 'hot' : v >= 60 ? 'warm' : '')
+const gb = (b) => (b / 1073741824).toFixed(1)
+
+function cpuWords(v) {
+  if (v < 20) return 'Resting: hardly anything is going on.'
+  if (v < 50) return 'Working gently: plenty of power to spare.'
+  if (v < 80) return 'Busy, but it can still take more.'
+  return 'Flat out: things may feel slow until it calms down.'
+}
+function memWords(p, total, used) {
+  const free = gb(total - used)
+  if (p < 50) return `Plenty of room: ${free} GB free.`
+  if (p < 75) return `About ${Math.round(p / 10) * 10}% full: still ${free} GB free, which is fine.`
+  if (p < 90) return `Getting full: ${free} GB free. Closing programs you are not using would help.`
+  return `Nearly full: only ${free} GB free. The computer may slow down; close something you are not using.`
+}
+
+function render(x) {
+  s = x
+  const cpu = Math.max(0, Math.min(100, x.cpu))
+  const memPct = (100 * x.memUsed) / x.memTotal
+  const worst = Math.max(cpu, memPct)
+  const mood = el('mood')
+  mood.style.setProperty('--m', worst >= 85 ? 'var(--rose, #f59ab0)' : worst >= 60 ? 'var(--amber, #f5c97a)' : 'var(--mint, #7ee2b8)')
+  el('moodTitle').textContent = worst >= 85 ? 'Your computer is working very hard' : worst >= 60 ? 'Your computer is fairly busy' : 'Your computer is calm'
+  el('moodText').textContent = worst >= 85 ? (memPct >= 85 ? 'The memory is nearly full.' : 'The processor is flat out.') : worst >= 60 ? 'Nothing to worry about, but it is doing a fair bit.' : 'Plenty of room for whatever you want to do.'
+
+  el('cpu').innerHTML = `${cpu.toFixed(0)}<small>%</small>`
+  el('cpuBar').style.width = cpu + '%'
+  el('cpuBar').className = heat(cpu)
+  el('cpuSay').textContent = cpuWords(cpu)
+  el('mem').innerHTML = `${gb(x.memUsed)}<small> of ${gb(x.memTotal)} GB</small>`
+  el('memBar').style.width = memPct + '%'
+  el('memBar').className = heat(memPct)
+  el('memSay').textContent = memWords(memPct, x.memTotal, x.memUsed)
+
+  el('cpuNow').textContent = `now ${cpu.toFixed(0)}%`
+  hist.push(cpu)
+  if (hist.length > 60) hist.shift()
+  el('hist').innerHTML = hist.map((v) => '<i style="height:' + Math.max(3, v) + '%"></i>').join('')
+
+  const procs = [...(x.procs || [])].sort((a, b) => (byMemory ? b.mem - a.mem : b.cpu - a.cpu)).slice(0, 8)
+  const top = byMemory ? Math.max(1, ...procs.map((p) => p.mem)) : 100
+  mount('#procs', procs.length ? procs.map((p) => h('div', { class: 'prow' },
+    h('div', { style: { minWidth: '0' } }, h('div', { class: 'pname', title: p.count > 1 ? `${p.count} parts` : null }, p.name), h('div', { class: 'pbar' }, h('i', { style: { width: `${Math.min(100, ((byMemory ? p.mem : p.cpu) / top) * 100)}%` } }))),
+    h('div', { class: 'pnum' }, byMemory ? (p.mem >= 1073741824 ? `${gb(p.mem)} GB` : `${Math.round(p.mem / 1048576)} MB`) : `${p.cpu.toFixed(p.cpu < 10 ? 1 : 0)}%`))) : h('div', { class: 'k-hint' }, 'Measuring…'))
+  const hours = Math.floor(x.uptime / 3600)
+  el('foot').textContent = `${x.host} · ${x.cores} processor cores · switched on ${hours >= 24 ? `${Math.floor(hours / 24)} days` : `${hours} hours`} ago`
+}
+
+el('switch').onclick = () => {
+  byMemory = !byMemory
+  el('switch').textContent = byMemory ? 'Show thinking instead' : 'Show memory instead'
+  el('listTitle').textContent = byMemory ? 'Programs using the most memory' : 'Busiest programs right now'
+  el('listSub').textContent = byMemory ? 'How much of the memory each program is holding. A program in several parts (like a browser) is added up.' : 'How much of the processor each program used in the last few seconds.'
+  if (s) render(s)
+}
+el('ask').onclick = () => prism.agent.send('Using system_stats, look at how busy my computer is and tell me in plain words whether anything looks wrong, and what I could do about it.')
+prism.on('stats', render)
+prism.ready(async () => { try { render(await prism.call('stats')) } catch (e) { console.error(e) } })
+</script>
+</body>
+</html>
