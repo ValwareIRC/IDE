@@ -7,6 +7,7 @@ import { useSessions } from '@/state/sessions'
 import { useLayout } from '@/state/layout'
 import { toastError, useUi } from '@/state/ui'
 import { Markdown } from '@/components/Markdown'
+import { copyText } from '@/lib/copy'
 import { cx, humanCost, humanDuration, humanTokens } from '@/lib/format'
 
 interface Column {
@@ -174,7 +175,7 @@ export function ComparePanel(): React.JSX.Element {
                     <button className="btn sm primary" onClick={() => void adopt(key)} title="Add this question and answer to the conversation and switch the session to this model">
                       <CornerDownRight size={12} /> Continue with this one
                     </button>
-                    <button className="btn sm ghost" onClick={() => void navigator.clipboard.writeText(c.text)}>
+                    <button className="btn sm ghost" onClick={() => void copyText(c.text)}>
                       Copy
                     </button>
                   </div>

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Columns2, GitCompare, Maximize, Pipette, SplitSquareHorizontal, X } from 'lucide-react'
 import { prism } from '@/lib/ipc'
 import { toastError, useUi } from '@/state/ui'
+import { copyText } from '@/lib/copy'
 import { cx, humanSize } from '@/lib/format'
 
 type Backdrop = 'checks' | 'dark' | 'light'
@@ -186,7 +187,7 @@ export function ImageStudio({ url, path }: { url: string; path: string }): React
 
   const copy = (): void => {
     if (!pixel) return
-    void navigator.clipboard.writeText(hex(pixel))
+    void copyText(hex(pixel))
     useUi.getState().toast('success', `Copied ${hex(pixel)}`)
   }
 

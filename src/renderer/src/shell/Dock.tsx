@@ -18,6 +18,7 @@ import { useLayout, type DockController, type OpenPanelOptions, type PanelKind }
 import { useEditor, isDirty } from '@/state/editor'
 import { useSessions } from '@/state/sessions'
 import { useApp } from '@/state/app'
+import { describeTabs, noteGroupUsed, pickGroup } from './dockPlace'
 import { useUi } from '@/state/ui'
 import { useOutline } from '@/state/outline'
 import { EditorPanel } from '@/panels/editor/EditorPanel'
@@ -58,6 +59,7 @@ import { MultiversePanel } from '@/panels/multiverse/Multiverse'
 import { FileIcon } from '@/components/FileIcon'
 import { cx } from '@/lib/format'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { copyText } from '@/lib/copy'
 import { Footprints, GitPullRequest, TextSearch, Gauge, ListTodo, Split, BookCheck, Clock3, Coffee, Compass, Radar, LayoutDashboard, FlaskConical, Globe, LocateFixed, Replace, Box, CircleAlert, Columns3, GitCompare, GitMerge, History as HistoryIcon, Layers, Workflow, ListChecks, Map as MapIcon, Puzzle, Settings, Sparkle, TerminalSquare, BarChart3 } from 'lucide-react'
 
 const THEME: DockviewTheme = { name: 'prism', className: 'dockview-theme-prism', colorScheme: 'dark', gap: 6 }
@@ -410,7 +412,7 @@ function Tab(p: IDockviewPanelHeaderProps<Params>): React.JSX.Element {
     if (path) {
       out.push(
         { sep: true },
-        { label: 'Copy path', onClick: () => void navigator.clipboard.writeText(path) },
+        { label: 'Copy path', onClick: () => void copyText(path) },
         { label: 'Reveal in file manager', onClick: () => void prism.app.reveal(path) }
       )
       if (kind === 'editor') {
@@ -552,6 +554,8 @@ function applySaved(api: DockviewApi, raw: string | null): boolean {
   if (!raw) return false
   try {
     api.fromJSON(JSON.parse(raw))
+    // a file opened from outside the project (by its full path) was only let in for that window's life
+    for (const p of [...api.panels]) if (/^([a-z]:)?[\\/]/i.test((p.params as Params | undefined)?.path ?? '')) api.removePanel(p)
     if (api.totalPanels === 0) return false
     // layouts saved before a kind kept its page alive
     for (const p of api.panels) if (KEEP_ALIVE.has((p.params as Params | undefined)?.kind ?? '') && p.api.renderer !== 'always') p.api.setRenderer('always')
@@ -636,7 +640,7 @@ export function Dock(): React.JSX.Element {
           return
         }
         const params: Params = { kind: opts.kind, ...(opts.params as Partial<Params>), ...(opts.preview ? { preview: true } : {}) }
-        const center = centerGroup(api)
+        const center = opts.area === 'center' ? (pickGroup(api, opts.kind) ?? centerGroup(api)) : centerGroup(api)
         let position: AddPanelPositionOptions | undefined
         // a look-only tab takes the place of the previous one
         const stale = opts.preview ? api.panels.find((x) => (x.params as Params | undefined)?.preview && !isDirty(useEditor.getState().docs[(x.params as Params).path ?? ''])) : undefined
@@ -720,6 +724,9 @@ export function Dock(): React.JSX.Element {
           useOutline.getState().forget(path)
         }
       })
+      api.onDidActiveGroupChange((g) => noteGroupUsed(g))
+      // the agent's tabs_look reads this (main/services.ts)
+      ;(window as unknown as { __prismTabs?: () => unknown }).__prismTabs = () => describeTabs(api)
       api.onDidActivePanelChange((ev) => {
         const params = ev.panel?.params as Params | undefined
         if (params?.kind === 'editor' && params.path) useEditor.getState().setActive(params.path)

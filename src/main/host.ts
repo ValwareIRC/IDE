@@ -196,6 +196,8 @@ export class Host {
   private seq = 0
   /** Open another window (index.ts sets it). */
   newWindow: ((root: string | null) => void) | null = null
+  /** Files handed to Prism for windows still opening, by window; each window asks for its own once (main/handover.ts). */
+  readonly handedFiles = new Map<number, string>()
   /** Tabs out on the desktop (main/float.ts); set once the app is ready. */
   floats: Floats | null = null
   /** Requests from clients that are not windows (ipc.ts sets it). */

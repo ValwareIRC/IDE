@@ -7,6 +7,7 @@ import { useLayout } from '@/state/layout'
 import { useSessions } from '@/state/sessions'
 import { toastError, useUi } from '@/state/ui'
 import { FileIcon } from '@/components/FileIcon'
+import { copyText } from '@/lib/copy'
 import { cx, timeAgo } from '@/lib/format'
 
 const ROW = 26
@@ -169,7 +170,7 @@ export function HistoryPanel({ focus }: { focus?: string }): React.JSX.Element {
               {selected.author} · {new Date(selected.date).toLocaleString()} · <span className="mono">{selected.sha.slice(0, 10)}</span>
             </div>
             <div className="row" style={{ gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
-              <button className="btn sm ghost" onClick={() => void navigator.clipboard.writeText(selected.sha).then(() => useUi.getState().toast('success', 'Copied the commit id'))}>
+              <button className="btn sm ghost" onClick={() => void copyText(selected.sha).then(() => useUi.getState().toast('success', 'Copied the commit id'))}>
                 <Copy size={11} /> Copy id
               </button>
               <button

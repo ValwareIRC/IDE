@@ -5321,3 +5321,8 @@ html.mobile .size-warn-close {
 .demo-wrap { display: inline-flex; min-width: 0; }
 /* point mode while recording: what the next click will point at */
 .record-pick { position: fixed; z-index: 2147483644; pointer-events: none; border-radius: 8px; border: 2px dashed var(--rose); background: rgb(from var(--rose) r g b / 0.10); box-shadow: 0 0 18px rgb(from var(--rose) r g b / 0.45); transition: left 90ms, top 90ms, width 90ms, height 90ms; }
+
+/* the file tree: several picked with Ctrl and Shift, and the folder a dragged selection will land in */
+.tree-row.picked { background: color-mix(in srgb, var(--accent) 16%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
+.tree-row.drop-on, .tree.drop-on { background: color-mix(in srgb, var(--accent) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
+.tree-picked { padding: 4px 8px 6px; }

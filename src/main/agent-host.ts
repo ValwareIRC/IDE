@@ -28,7 +28,7 @@ import { showTool } from '@core/agent/tools/fs'
 import { attachFileTool } from '@core/agent/tools/attach'
 import { todoTool } from '@core/agent/tools/misc'
 import { gestureTool } from '@core/agent/tools/gesture'
-import { createOpenProjectTool } from '@core/agent/tools/window'
+import { createOpenProjectTool, createTabsLookTool } from '@core/agent/tools/window'
 import { decisionRecordTool, decisionsLookTool, sessionOf, setDecisionTitles } from '@core/agent/tools/decisions'
 import { record as recordDecision, type Decision } from '@core/decisions/ledger'
 import { BITEBACK_NOTE, bitebackOn } from '@core/biteback/biteback'
@@ -413,7 +413,8 @@ export class AgentHost {
         settings: () => this.s.settings.get(),
         defaults: () => DEFAULT_SETTINGS,
         update: (patch) => void this.s.settings.update(patch),
-        open: (panel, section) => this.s.send('gadget:ui', { kind: 'openPanel', panel, section })
+        open: (panel, section) => this.s.send('gadget:ui', { kind: 'openPanel', panel, section }),
+        tabs: () => this.s.tabs()
       }),
       scratch: () => this.s.scratch,
       skills: () => this.s.skills(),
@@ -966,7 +967,7 @@ export class AgentHost {
         run.claude = c
       },
       protectedBy: (sid, paths) => this.protectedBy(sid, paths),
-      tools: [...createGadgetTools(this.s.gadgets), checkProjectTool, showTool, attachFileTool, todoTool, gestureTool, createOpenProjectTool((root) => this.s.host.newWindow?.(root)), decisionRecordTool, decisionsLookTool, ...this.bitebackTools(sessionId), ...(this.s.settings.get().claude.helpers ? createFleetTools(this.fleetHost()) : []), findReferencesTool, renameSymbolTool, ...createBrowserTools(this.s.preview), createScratchTool(this.s.scratch), createImpactTool({ latest: (sid) => this.history.settled(sid).then(() => latestChanges(this.s, sid)) }), findBreakingCommitTool, createTourTool, ...more],
+      tools: [...createGadgetTools(this.s.gadgets), checkProjectTool, showTool, attachFileTool, todoTool, gestureTool, createOpenProjectTool((root) => this.s.host.newWindow?.(root)), createTabsLookTool(() => this.s.tabs()), decisionRecordTool, decisionsLookTool, ...this.bitebackTools(sessionId), ...(this.s.settings.get().claude.helpers ? createFleetTools(this.fleetHost()) : []), findReferencesTool, renameSymbolTool, ...createBrowserTools(this.s.preview), createScratchTool(this.s.scratch), createImpactTool({ latest: (sid) => this.history.settled(sid).then(() => latestChanges(this.s, sid)) }), findBreakingCommitTool, createTourTool, ...more],
       modeChanged: (sid, mode) => {
         run.mode = mode
         this.s.repo.updateSession(sid, { mode })
@@ -991,6 +992,15 @@ export class AgentHost {
     parts.push(
       'Prism adds a few tools of its own, named mcp__prism__<tool>. The gadget_* tools build and drive gadgets: mini-apps inside Prism, each a sandboxed UI plus an optional Node backend that can run processes and offer tools to you. When the user wants a dashboard, a control panel, a viewer, a monitor, or a fleet of anything with buttons, read gadget_sdk first, then use gadget_write and gadget_open, and gadget_call to run a gadget\'s own tools; gadget_look shows you the gadget as the user sees it. When you notice that work in front of you has an ongoing or repeatable shape the two of you would both get at more easily through a panel — a build or a test run worth watching, a process, numbers that move, anything you keep reading out of scrollback — offer one with suggest_gadget and carry on; the user decides, and a kind they turn down is never raised again. find_references lists every use of a name across the project by meaning, and rename_symbol renames it everywhere in one step: prefer these to grep and hand edits for JavaScript and TypeScript. run_snippet runs a short JavaScript, TypeScript or Python snippet against the project in a notebook-like session that remembers what earlier snippets defined. browser_open, browser_look and browser_eval drive Prism\'s built-in browser: open the page you are working on, look at a picture of it, and click or read things in it, so you can check web work with your own eyes; check_accessibility shows what would shut people out of a page (faint or tiny text, things a screen reader cannot name, controls too small to tap, zoom turned off, sound with no words on screen), so run it on anything you build that people look at. check_project runs the project\'s checkers (types, lint, tests) and fills Prism\'s Problems panel. show opens a file in the user\'s view (images, 3D models, HTML pages, PDFs, code): use it after producing something worth looking at. attach_file hands the user a file as a card under your answer, which they can open on the computer or download straight to their phone through Prism\'s own connection: use it for anything they should keep or install (an APK, an installer, a video) instead of uploading it somewhere. todo_write is the plan the user watches at the top of the conversation: for any work with more than a couple of steps, send the whole plan in one call before you start, and call it again to tick each item off as you finish it. Prefer it to TaskCreate, which builds the plan one item at a time. gesture moves your face while the user is on a voice call with you (Prism tells you when): wave, nod, shake your head, smile or laugh, whenever you want to.'
     )
+    parts.push(
+      "tabs_look shows the user's tab groups in Prism: where each sits, the files, gadgets and pages open in each, and what is showing. Look before talking about 'the open file' or opening things for them; files you show join the group already holding their files, never one they keep for a gadget."
+    )
+    // without this Claude reaches for its own Agent tool, which only runs Claude models, and says GLM cannot be done
+    if (this.s.settings.get().claude.helpers) {
+      parts.push(
+        "The user has let you use Prism's other models. mcp__prism__prism_helper hands a self-contained task to a helper on any model Prism has, from any provider (GLM, other Claude models and the rest; its description lists them), and returns the helper's report. mcp__prism__fleet_list and mcp__prism__fleet_run run the teams of helpers the user saved in Settings. Use these, not your own Agent tool, whenever a helper should be on a model that is not Claude, or the user names a model or a fleet. The user's own rules about asking before starting helpers still apply."
+      )
+    }
     const own = this.s.gadgets.builtinNote()
     if (own) parts.push(own)
     if (extras.worktree) parts.push(`You are working in a separate copy of the project (a git worktree at ${extras.worktree.path}, on branch ${extras.worktree.branch}). The user's own project folder is untouched until they bring your work in, so work freely here. Dependencies may not be installed in this copy: install them first if a build or test needs them. Do not switch branches and do not merge; the user does that from Prism.`)

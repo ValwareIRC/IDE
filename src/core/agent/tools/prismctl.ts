@@ -10,7 +10,10 @@ export interface PrismHost {
   update(patch: SettingsPatch): void
   /** Open a panel in the window (settings take an optional section). */
   open(panel: string, section?: string): void
+  /** The window's tab groups and their tabs, for tabs_look; null when no window shows the project. */
+  tabs?(): Promise<TabsLayout | null>
 }
+import type { TabsLayout } from './window'
 
 const OFF_LIMITS = ['permissions', 'roles', 'claude', 'mcp', 'routing', 'keybindings', 'recentWorkspaces', 'onboarded', 'appearance.themes', 'appearance.accent', 'appearance.bg']
 

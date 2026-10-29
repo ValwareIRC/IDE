@@ -2,6 +2,7 @@ import type { McpClient } from '../../mcp/client'
 import type { GadgetManager } from '../../gadgets/manager'
 import { attachFileTool } from './attach'
 import { decisionRecordTool, decisionsLookTool } from './decisions'
+import { createTabsLookTool } from './window'
 import { gestureTool } from './gesture'
 import { deletePathTool, editFileTool, globTool, grepTool, listDirTool, movePathTool, readFileTool, showTool, writeFileTool } from './fs'
 import { createGadgetTools } from './gadgets'
@@ -108,6 +109,8 @@ export function buildTools(o: BuildToolsOptions): Map<string, AgentTool> {
   if (o.prism) {
     const [settingsTool, openTool] = createPrismTools(o.prism)
     list.push(openTool!)
+    const tabs = o.prism.tabs?.bind(o.prism)
+    if (tabs) list.push(createTabsLookTool(tabs))
     if (!o.readOnly) list.push(settingsTool!)
   }
   if (o.background) list.push(...createBackgroundTools())

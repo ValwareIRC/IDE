@@ -11,6 +11,7 @@ import { useSessions } from '@/state/sessions'
 import { useTerminals } from '@/state/terminals'
 import { toastError, useUi } from '@/state/ui'
 import { useRefactor } from '@/state/refactor'
+import { copyText } from '@/lib/copy'
 import { CONV_DEFAULT, LAYOUTS } from '@/panels/agent/Turns'
 
 const conv = (): typeof CONV_DEFAULT => ({ ...CONV_DEFAULT, ...useApp.getState().settings?.conversation })
@@ -302,7 +303,7 @@ export function exportSession(): void {
     else if (it.kind === 'tool') md.push(`> ${it.name}${it.isError ? ' (error)' : ''}: ${JSON.stringify(it.args).slice(0, 200)}`, '')
     else if (it.kind === 'system' && it.subkind === 'compaction') md.push(`## Summary of earlier conversation`, '', it.text, '')
   }
-  void navigator.clipboard.writeText(md.join('\n')).then(() => useUi.getState().toast('success', 'Copied the session as markdown'))
+  void copyText(md.join('\n')).then((ok) => ok && useUi.getState().toast('success', 'Copied the session as markdown'))
 }
 
 /** Flattened list for the command palette: every leaf item with its menu path. */

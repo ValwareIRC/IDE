@@ -497,8 +497,10 @@ export function Composer({ sessionId }: { sessionId: string | null }): React.JSX
         e.preventDefault()
         const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'))
         for (const f of files.slice(0, 6)) void addFile(f)
+        const many = e.dataTransfer.getData('application/x-prism-paths')
         const mention = e.dataTransfer.getData('application/x-prism-path')
-        if (mention) insertAtCursor(`@${mention} `)
+        if (many) insertAtCursor((JSON.parse(many) as string[]).map((p) => `@${p} `).join(''))
+        else if (mention) insertAtCursor(`@${mention} `)
       }}
     >
       {suggest && suggest.items.length > 0 && (

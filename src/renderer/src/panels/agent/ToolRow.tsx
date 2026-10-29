@@ -36,6 +36,7 @@ import { languageFor, opensInPreview } from '@/lib/languages'
 import { cx, humanDuration } from '@/lib/format'
 import { playTour } from '@/panels/tour/Tour'
 import { useSessions } from '@/state/sessions'
+import { copyText } from '@/lib/copy'
 import { AssumptionCard } from './Background'
 
 export function describeCall(call: ToolCall): { icon: React.ReactNode; verb: string; target: string } {
@@ -178,7 +179,7 @@ function CallRow({ item, restored, onRestore }: { item: ToolItem; restored?: boo
     if (path) out.push({ label: 'Open file', onClick: () => (opensInPreview(path) ? openPreview(path) : openEditor(path)) })
     if (command) {
       out.push(
-        { label: 'Copy command', onClick: () => void navigator.clipboard.writeText(command) },
+        { label: 'Copy command', onClick: () => void copyText(command) },
         {
           label: 'Run again in my terminal',
           onClick: () => {
@@ -190,7 +191,7 @@ function CallRow({ item, restored, onRestore }: { item: ToolItem; restored?: boo
         }
       )
     }
-    out.push({ label: 'Copy output', onClick: () => void navigator.clipboard.writeText(item.content) }, { label: 'Copy arguments as JSON', onClick: () => void navigator.clipboard.writeText(JSON.stringify(item.args, null, 2)) })
+    out.push({ label: 'Copy output', onClick: () => void copyText(item.content) }, { label: 'Copy arguments as JSON', onClick: () => void copyText(JSON.stringify(item.args, null, 2)) })
     if (item.diff && onRestore) out.push({ sep: true }, { label: 'Revert this change', danger: true, onClick: () => onRestore(item.diff!.path) })
     return out
   }

@@ -21,7 +21,8 @@ export function makeApi(t: Transport): PrismApi {
     app: {
       info: () => invoke(CH.AppInfo),
       openExternal: (url) => invoke(CH.AppOpenExternal, url),
-      reveal: (p) => invoke(CH.AppReveal, p)
+      reveal: (p) => invoke(CH.AppReveal, p),
+      copy: (text) => invoke(CH.AppCopy, text)
     },
     face: {
       info: () => invoke(CH.FaceInfo),
@@ -40,7 +41,9 @@ export function makeApi(t: Transport): PrismApi {
       isMaximized: () => invoke(CH.WinIsMaximized),
       onMaximizedChanged: (cb) => on(CH.WinMaximizedChanged, cb),
       zoom: (step) => invoke(CH.WinZoom, step),
-      open: (root) => invoke(CH.WinNew, root ?? null)
+      open: (root) => invoke(CH.WinNew, root ?? null),
+      handed: () => invoke(CH.WinHanded),
+      onHanded: (cb) => on(CH.WinHandedFile, cb)
     },
     float: {
       open: (spec) => invoke(CH.FloatOpen, spec),

@@ -7,6 +7,7 @@ import { useLayout } from '@/state/layout'
 import { useSessions } from '@/state/sessions'
 import { toastError } from '@/state/ui'
 import { Select } from '@/components/Select'
+import { copyText } from '@/lib/copy'
 import { cx, timeAgo } from '@/lib/format'
 
 const EVENTS: Array<{ value: AutomationHook['event']; label: string; sub: string; match: string }> = [
@@ -275,7 +276,7 @@ export function AutomationsPanel(): React.JSX.Element {
                     <label>
                       <span>Its address</span>
                       <code className="auto-url truncate">{state.webhooks?.[t.id] || 'saving…'}</code>
-                      <button className="icon-btn sm" title="Copy the address" disabled={!state.webhooks?.[t.id]} onClick={() => void navigator.clipboard.writeText(state.webhooks?.[t.id] ?? '')}>
+                      <button className="icon-btn sm" title="Copy the address" disabled={!state.webhooks?.[t.id]} onClick={() => void copyText(state.webhooks?.[t.id] ?? '')}>
                         <Copy size={11} />
                       </button>
                     </label>

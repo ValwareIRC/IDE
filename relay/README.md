@@ -17,7 +17,9 @@ npm install
 PORT=8794 RELAY_SECRET=something-long node server.js
 ```
 
-Then put it behind TLS. With Apache:
+It listens on 127.0.0.1 only, for a web server in front of it to add TLS. On a server where you cannot change the web server, `HOST=0.0.0.0` makes it listen for everyone on its own port, and the phone uses `ws://the.server:8794/<the secret>`: still sealed end to end, since the relay never holds the keys, but the opening greeting is not hidden from someone watching the network.
+
+Otherwise put it behind TLS. With Apache:
 
 ```
 ProxyPass        /relay/ http://127.0.0.1:8794/ upgrade=websocket timeout=1200

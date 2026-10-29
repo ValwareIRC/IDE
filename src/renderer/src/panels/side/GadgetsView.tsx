@@ -8,6 +8,7 @@ import { prism } from '@/lib/ipc'
 import { cx } from '@/lib/format'
 import { ContextMenu, type MenuEntry } from '@/components/ContextMenu'
 import { report } from '@/demo/bus'
+import { copyText } from '@/lib/copy'
 import { toastError, useUi } from '@/state/ui'
 
 export function GadgetsView(): React.JSX.Element {
@@ -39,7 +40,7 @@ export function GadgetsView(): React.JSX.Element {
       { label: 'Ask the agent to improve it', onClick: () => { openAgent(); void useSessions.getState().send(`Read gadget "${id}" with gadget_read and improve it: `) } },
       // a folder on the computer is not something a phone can open
       ...(window.__prismMobile ? [] : [{ label: 'Open folder', onClick: () => void prism.gadgets.openDir(id) }]),
-      { label: 'Copy id', onClick: () => void navigator.clipboard.writeText(id) },
+      { label: 'Copy id', onClick: () => void copyText(id) },
       // Prism's own cannot go; a changed copy of one can, which brings the original back
       ...(g.scope === 'builtin'
         ? []

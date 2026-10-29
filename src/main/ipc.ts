@@ -12,7 +12,7 @@ import { appendNote } from '@core/agent/tools/remember'
 import { listCheckers, runChecker } from '@core/checks/checks'
 import * as gitMore from '@core/git/more'
 import { killJob, listJobs } from '@core/agent/tools/shell'
-import { app, dialog, ipcMain, shell } from 'electron'
+import { app, clipboard, dialog, ipcMain, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { copyFile, open, readFile, rmdir, stat, writeFile } from 'node:fs/promises'
 import { dirname, extname, join } from 'node:path'
@@ -50,6 +50,7 @@ import * as refactor from '@core/refactor/refactor'
 import * as dashboard from '@core/dashboard/overview'
 import { placeOf, wslRoot } from '@shared/place'
 import { RemoteWorkspace } from '@core/remote/remoteWorkspace'
+import { Workspace } from '@core/fs/workspace'
 import { execFile } from 'node:child_process'
 import { getAdapter } from '@core/providers'
 import { isChatModel } from '@core/models/known'
@@ -215,6 +216,7 @@ export function registerIpc(host: Host): IpcDispatch {
       await f.close()
     }
   })
+  h(CH.AppCopy, (_e, text: string) => clipboard.writeText(String(text ?? '')))
   h(CH.AppReveal, (_e, p: string) => {
     const ws = s.requireWorkspace()
     if (placeOf(ws.root).kind === 'ssh') throw new Error('That file is on another computer, so it cannot be shown in this one\'s file manager.')
@@ -229,6 +231,11 @@ export function registerIpc(host: Host): IpcDispatch {
   })
   on(CH.WinClose, () => s.win()?.close())
   h(CH.WinNew, (_e, root: string | null) => host.newWindow?.(typeof root === 'string' && root ? root : null))
+  h(CH.WinHanded, (e) => {
+    const file = host.handedFiles.get(e.sender.id) ?? null
+    host.handedFiles.delete(e.sender.id)
+    return file
+  })
   h(CH.FloatOpen, (_e, spec: FloatSpec) => void host.floats?.open(spec, s.workspace?.root ?? null))
   h(CH.FloatList, () => host.floats?.keys() ?? [])
   h(CH.FloatPin, (e, on: boolean) => host.floats?.pin(e.sender.id, on !== false))
@@ -335,13 +342,36 @@ export function registerIpc(host: Host): IpcDispatch {
   })
   h(CH.WorkspaceCurrent, () => s.workspace?.root ?? null)
   h(CH.FsList, (_e, p: string) => s.requireWorkspace().list(p))
-  h(CH.FsRead, (_e, p: string) => s.requireWorkspace().read(p))
-  h(CH.FsWrite, (_e, p: string, content: string) => s.requireWorkspace().write(p, content))
-  h(CH.FsWriteBinary, (_e, p: string, base64: string) => s.requireWorkspace().writeRaw(p, Buffer.from(base64, 'base64')))
+  // a file the user opened from outside the project goes by its full path (Services.outsideFile)
+  const beside = (abs: string): Workspace => new Workspace(dirname(abs))
+  h(CH.FsRead, async (_e, p: string) => {
+    const out = s.outsideFile(p)
+    if (!out) return s.requireWorkspace().read(p)
+    return { ...(await beside(out).read(basename(out))), path: p }
+  })
+  h(CH.FsWrite, (_e, p: string, content: string) => {
+    const out = s.outsideFile(p)
+    return out ? beside(out).write(basename(out), content) : s.requireWorkspace().write(p, content)
+  })
+  h(CH.FsWriteBinary, (_e, p: string, base64: string) => {
+    const out = s.outsideFile(p)
+    return out ? beside(out).writeRaw(basename(out), Buffer.from(base64, 'base64')) : s.requireWorkspace().writeRaw(p, Buffer.from(base64, 'base64'))
+  })
   h(CH.FsCreate, (_e, p: string, kind: 'file' | 'dir') => s.requireWorkspace().create(p, kind))
   h(CH.FsRename, (_e, a: string, b: string) => s.requireWorkspace().rename(a, b))
   h(CH.FsDelete, (_e, p: string) => s.requireWorkspace().delete(p))
   h(CH.FsAssetUrl, async (_e, p: string) => {
+    const out = s.outsideFile(p)
+    if (out) {
+      let v = Date.now()
+      try {
+        v = Math.floor((await stat(out)).mtimeMs)
+      } catch {
+        /* missing: let the preview show an error */
+      }
+      // the folders stay as folders, so a model's textures beside it are found (index.ts serves them)
+      return `prism://out-${s.id}/${out.split(/[\\/]/).map(encodeURIComponent).join('/')}?v=${v}`
+    }
     const ws = s.requireWorkspace()
     let v = Date.now()
     try {

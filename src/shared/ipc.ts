@@ -102,6 +102,7 @@ export const CH = {
   AppInfo: 'app:info',
   AppOpenExternal: 'app:open-external',
   AppReveal: 'app:reveal',
+  AppCopy: 'app:copy',
   FileOpen: 'file:open',
   FileReveal: 'file:reveal',
   FilePart: 'file:part',
@@ -271,6 +272,8 @@ export const CH = {
   HistoryState: 'history:state',
   HistoryWhy: 'history:why',
   WinNew: 'win:new',
+  WinHanded: 'win:handed',
+  WinHandedFile: 'win:handed-file',
 
   FloatOpen: 'float:open',
   FloatPin: 'float:pin',
@@ -419,6 +422,8 @@ export interface PrismApi {
     info(): Promise<AppInfo>
     openExternal(url: string): Promise<void>
     reveal(path: string): Promise<void>
+    /** Puts text on the computer's clipboard (lib/copy.ts says why it is done here). */
+    copy(text: string): Promise<void>
   }
   /** The face shown in calls: a VRM avatar, read a piece at a time so the phone can fetch it too. */
   face: {
@@ -446,6 +451,10 @@ export interface PrismApi {
     zoom(step: number): Promise<number>
     /** Another Prism window, empty (pick a project in it), or on a project. */
     open(root?: string | null): Promise<void>
+    /** The file this window was opened to show ("Open with Prism"), once; relative to its project. */
+    handed(): Promise<string | null>
+    /** A file handed to Prism that belongs in this window, which is already open. */
+    onHanded(cb: (file: string) => void): Unsubscribe
   }
   /** Tabs taken out of Prism and put on the desktop. */
   float: {

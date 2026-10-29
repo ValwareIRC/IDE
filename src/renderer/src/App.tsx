@@ -4,6 +4,7 @@ import { useSessions } from '@/state/sessions'
 import { useUi } from '@/state/ui'
 import { useLayout } from '@/state/layout'
 import { prism } from '@/lib/ipc'
+import { opensInPreview } from '@/lib/languages'
 import { useGlobalKeys } from '@/lib/keys'
 import { bootMark } from '@/lib/bootMark'
 import { installGadgetBridge } from '@/lib/gadgetBridge'
@@ -124,6 +125,31 @@ export function App(): React.JSX.Element {
       useSessions.setState({ sessions: [], active: null })
     }
   }, [workspace, booted])
+
+  // a file handed to Prism ("Open with Prism" in Explorer): this window was opened for it, or it belongs here.
+  // A file from outside the project comes as its full path; a window opened just for a file has no project.
+  useEffect(() => {
+    if (!booted) return
+    const open = (file: string): void => {
+      const l = useLayout.getState()
+      // the tabs may not be set up yet in a window that has only just opened
+      if (!l.controller) {
+        const off = useLayout.subscribe((s) => {
+          if (!s.controller) return
+          off()
+          open(file)
+        })
+        return
+      }
+      if (opensInPreview(file)) l.openPreview(file)
+      else l.openEditor(file)
+    }
+    prism.win
+      .handed()
+      .then((file) => file && open(file))
+      .catch(() => {})
+    return prism.win.onHanded(open)
+  }, [booted])
 
   if (!booted) {
     return (

@@ -9,11 +9,12 @@ import { useApp } from '@/state/app'
 import { useEditor } from '@/state/editor'
 import { useLayout } from '@/state/layout'
 import { useRefactor } from '@/state/refactor'
-import { toastError } from '@/state/ui'
+import { toastError, useUi } from '@/state/ui'
 import { opensInPreview } from '@/lib/languages'
 import { basename, cx, dirname } from '@/lib/format'
 import { FileIcon } from '@/components/FileIcon'
 import { ContextMenu, type MenuEntry } from '@/components/ContextMenu'
+import { copyText } from '@/lib/copy'
 import { registerSurface, report } from '@/demo/bus'
 
 interface Row {
@@ -73,6 +74,11 @@ export function ExplorerView(): React.JSX.Element {
   const [editing, setEditing] = useState<{ kind: 'rename' | 'new-file' | 'new-dir'; path: string; parent: string } | null>(null)
   /** A row a demo is pointing at. */
   const [marked, setMarked] = useState<string | null>(null)
+  /** Files and folders picked with Ctrl and Shift, to act on together; `anchor` is where a Shift range starts. */
+  const [picked, setPicked] = useState<Set<string>>(() => new Set())
+  const anchor = useRef<string | null>(null)
+  /** The folder a dragged selection is over, so it can show it will land there. */
+  const [dropOn, setDropOn] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -232,7 +238,86 @@ export function ExplorerView(): React.JSX.Element {
     setEditing({ kind, path: '', parent })
   }
 
+  /** Moves files and folders into a folder ('.' for the top), skipping any that would land inside themselves. */
+  const moveInto = async (paths: string[], folder: string): Promise<void> => {
+    const going = paths.filter((p) => folder !== p && !folder.startsWith(p + '/') && (dirname(p) || '.') !== folder)
+    if (!going.length) return
+    let moved = 0
+    for (const p of going) {
+      const to = (folder === '.' ? '' : folder + '/') + basename(p)
+      try {
+        await prism.fs.rename(p, to)
+        useEditor.getState().rename(p, to)
+        moved++
+      } catch (e) {
+        toastError(e, `${p} could not be moved`)
+      }
+    }
+    setPicked(new Set())
+    for (const d of new Set([...going.map((p) => dirname(p) || '.'), folder])) void load(d)
+    if (moved) useUi.getState().toast('success', `Moved ${moved} item${moved === 1 ? '' : 's'}`, `Into ${folder === '.' ? 'the top of the project' : folder}.`)
+  }
+
+  /** What a right-click on a selection of several offers: things that make sense for all of them at once. */
+  const selectionMenu = (paths: string[]): MenuEntry[] => {
+    const files = paths.filter((p) => rows.find((r) => r.entry.path === p)?.entry.kind === 'file')
+    return [
+      { label: `Copy ${paths.length} paths`, onClick: () => void copyText(paths.join('\n')) },
+      ...(files.length ? [{ label: `Pin ${files.length} file${files.length === 1 ? '' : 's'} for the agent (this session)`, onClick: () => void (async () => { for (const f of files) await pinForAgent(f) })() }] : []),
+      { sep: true },
+      {
+        label: `Delete ${paths.length} items`,
+        danger: true,
+        onClick: () => {
+          if (!window.confirm(`Delete these ${paths.length}?\n\n${paths.slice(0, 12).join('\n')}${paths.length > 12 ? '\n…' : ''}`)) return
+          void (async () => {
+            for (const p of paths) {
+              try {
+                await prism.fs.delete(p)
+                if (docs[p]) useEditor.getState().close(p)
+              } catch (e) {
+                toastError(e, `${p} could not be deleted`)
+              }
+            }
+            setPicked(new Set())
+            for (const d of new Set(paths.map((p) => dirname(p) || '.'))) void load(d)
+          })()
+        }
+      },
+      { sep: true },
+      { label: 'Clear the selection', hint: 'Esc', onClick: () => setPicked(new Set()) }
+    ]
+  }
+
+  /** A click: Ctrl adds or takes away one, Shift picks everything from the last one, a plain click opens as before. */
+  const clickRow = (e: React.MouseEvent, entry: FsEntry): void => {
+    if (e.ctrlKey || e.metaKey) {
+      setPicked((prev) => {
+        const next = new Set(prev)
+        if (next.has(entry.path)) next.delete(entry.path)
+        else next.add(entry.path)
+        return next
+      })
+      anchor.current = entry.path
+      return
+    }
+    if (e.shiftKey && anchor.current) {
+      const order = rows.filter((r) => r.entry.name !== '').map((r) => r.entry.path)
+      const a = order.indexOf(anchor.current)
+      const b = order.indexOf(entry.path)
+      if (a >= 0 && b >= 0) {
+        setPicked(new Set(order.slice(Math.min(a, b), Math.max(a, b) + 1)))
+        return
+      }
+    }
+    anchor.current = entry.path
+    setPicked(new Set())
+    if (entry.kind === 'dir') toggle(entry.path)
+    else openFile(entry.path)
+  }
+
   const menuEntries = (entry: FsEntry | null): MenuEntry[] => {
+    if (entry && picked.size > 1 && picked.has(entry.path)) return selectionMenu([...picked])
     const items: MenuEntry[] = [
       { label: 'New file', icon: <FilePlus size={14} />, onClick: () => startNew('new-file', entry) },
       { label: 'New folder', icon: <FolderPlus size={14} />, onClick: () => startNew('new-dir', entry) }
@@ -241,7 +326,7 @@ export function ExplorerView(): React.JSX.Element {
       items.push(
         { sep: true },
         { label: 'Rename', hint: 'F2', onClick: () => setEditing({ kind: 'rename', path: entry.path, parent: dirname(entry.path) || '.' }) },
-        { label: 'Copy path', onClick: () => void navigator.clipboard.writeText(entry.path) },
+        { label: 'Copy path', onClick: () => void copyText(entry.path) },
         ...(entry.kind === 'file' ? [{ label: 'Pin for the agent (this session)', onClick: () => void pinForAgent(entry.path) }] : []),
         ...(entry.kind === 'file' && /\.html?$/i.test(entry.path) ? [{ label: 'Open in the browser', onClick: () => useLayout.getState().openBrowser(entry.path) }] : []),
         { label: 'Reveal in file manager', onClick: () => void prism.app.reveal(entry.path) },
@@ -314,7 +399,27 @@ export function ExplorerView(): React.JSX.Element {
           <RefreshCw size={13} />
         </button>
       </div>
-      <div className="side-body tree">
+      <div
+        className={cx('side-body tree', dropOn === '.' && 'drop-on')}
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes('application/x-prism-paths') || (e.target as HTMLElement).closest('.tree-row')) return
+          e.preventDefault()
+          if (dropOn !== '.') setDropOn('.')
+        }}
+        onDragLeave={(e) => e.currentTarget === e.target && setDropOn(null)}
+        onDrop={(e) => {
+          setDropOn(null)
+          const raw = e.dataTransfer.getData('application/x-prism-paths')
+          if (!raw || (e.target as HTMLElement).closest('.tree-row')) return
+          e.preventDefault()
+          void moveInto(JSON.parse(raw) as string[], '.')
+        }}
+      >
+        {picked.size > 1 && (
+          <div className="tree-picked faint small">
+            {picked.size} selected · right-click for what to do with them · Esc to clear
+          </div>
+        )}
         {rows.map(({ entry, depth }) => {
           const isNew = entry.name === ''
           const isEditing = isNew || (editing?.kind === 'rename' && editing.path === entry.path)
@@ -325,17 +430,35 @@ export function ExplorerView(): React.JSX.Element {
           return (
             <div
               key={entry.path}
-              className={cx('tree-row', entry.kind === 'dir' && 'dir', entry.kind === 'dir' && skipped.has(entry.name) && 'skipped', activeDoc === entry.path && 'sel', t && t !== 'read' && 'touched', busy && 'agent-here', marked === entry.path && 'demo-mark')}
+              className={cx('tree-row', entry.kind === 'dir' && 'dir', entry.kind === 'dir' && skipped.has(entry.name) && 'skipped', activeDoc === entry.path && 'sel', t && t !== 'read' && 'touched', busy && 'agent-here', marked === entry.path && 'demo-mark', picked.size > 1 && picked.has(entry.path) && 'picked', dropOn === entry.path && 'drop-on')}
               data-demo={`tree:${entry.path}`}
               style={{ paddingLeft: 6 + depth * 14 }}
               title={h ? `${entry.path}\nThis session: read ${h.reads} time${h.reads === 1 ? '' : 's'}, changed ${h.writes} time${h.writes === 1 ? '' : 's'}${busy ? '\nThe agent is working here now' : ''}` : entry.path}
               draggable={!isEditing}
               onDragStart={(e) => {
+                // a picked row carries the whole selection with it
+                const many = picked.size > 1 && picked.has(entry.path) ? [...picked] : [entry.path]
                 e.dataTransfer.setData('application/x-prism-path', entry.path)
-                e.dataTransfer.setData('text/plain', `@${entry.path} `)
-                e.dataTransfer.effectAllowed = 'copy'
+                e.dataTransfer.setData('application/x-prism-paths', JSON.stringify(many))
+                e.dataTransfer.setData('text/plain', many.map((p) => `@${p} `).join(''))
+                e.dataTransfer.effectAllowed = 'copyMove'
               }}
-              onClick={() => !isEditing && (entry.kind === 'dir' ? toggle(entry.path) : openFile(entry.path))}
+              onDragOver={(e) => {
+                if (entry.kind !== 'dir' || !e.dataTransfer.types.includes('application/x-prism-paths')) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                if (dropOn !== entry.path) setDropOn(entry.path)
+              }}
+              onDragLeave={() => dropOn === entry.path && setDropOn(null)}
+              onDrop={(e) => {
+                setDropOn(null)
+                const raw = e.dataTransfer.getData('application/x-prism-paths')
+                if (entry.kind !== 'dir' || !raw) return
+                e.preventDefault()
+                e.stopPropagation()
+                void moveInto(JSON.parse(raw) as string[], entry.path)
+              }}
+              onClick={(e) => !isEditing && clickRow(e, entry)}
               onDoubleClick={() => !isEditing && entry.kind !== 'dir' && openFile(entry.path, true)}
               onContextMenu={(e) => {
                 e.preventDefault()
@@ -343,6 +466,7 @@ export function ExplorerView(): React.JSX.Element {
                 setMenu({ x: e.clientX, y: e.clientY, entry })
               }}
               onKeyDown={(e) => {
+                if (e.key === 'Escape' && picked.size) setPicked(new Set())
                 if (e.key === 'F2' && !isEditing) setEditing({ kind: 'rename', path: entry.path, parent: dirname(entry.path) || '.' })
               }}
               tabIndex={0}

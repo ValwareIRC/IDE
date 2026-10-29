@@ -4,6 +4,7 @@ import { shellCommand } from '../../remote/command'
 import { snapshotProject } from '../../history/snapshot'
 import { randomUUID } from 'node:crypto'
 import { shellRisk } from '../permissions'
+import { findPwsh } from '../../pty/pwsh'
 import { bool, clipOutput, err, num, str, type AgentTool, type ToolContext, type ToolResult } from './types'
 
 const DEFAULT_TIMEOUT = 120_000
@@ -25,15 +26,27 @@ export function shellLabelFor(root: string, override: string | null): string {
 /** Windows PowerShell 5.1 writes files in UTF-16 (> and >>) or the ANSI code page (Set-Content); this makes them UTF-8. */
 const PS_UTF8 = "$PSDefaultParameterValues['Out-File:Encoding']='utf8';$PSDefaultParameterValues['Set-Content:Encoding']='utf8';$PSDefaultParameterValues['Add-Content:Encoding']='utf8';[Console]::OutputEncoding=[Text.Encoding]::UTF8;"
 
+/** What the agent is told when its shell is Windows PowerShell 5.1, which loses quotes on the way to other programs. */
+const WIN_PS_51 =
+  'Windows PowerShell 5.1. It strips double quotes inside arguments it passes to other programs (node -e \'console.log("x")\' reaches node without the quotes, and backtick escapes do not help): put code for node, python and the like in a file and run the file, and avoid double quotes inside arguments'
+
+/** PowerShell 7 writes files as UTF-8 already; what other programs print still needs reading as UTF-8. */
+const PWSH_UTF8 = '[Console]::OutputEncoding=[Text.Encoding]::UTF8;'
+
 export function agentShell(override: string | null): { exe: string; args: (cmd: string) => string[]; label: string } {
   const isWin = process.platform === 'win32'
   if (override && override.trim()) {
     const exe = override.trim()
-    if (/pwsh|powershell/i.test(exe)) return { exe, args: (c) => ['-NoProfile', '-NonInteractive', '-Command', /pwsh/i.test(exe) ? c : `${PS_UTF8}${c}`], label: 'PowerShell' }
+    if (/pwsh|powershell/i.test(exe)) return { exe, args: (c) => ['-NoProfile', '-NonInteractive', '-Command', /pwsh/i.test(exe) ? `${PWSH_UTF8}${c}` : `${PS_UTF8}${c}`], label: /pwsh/i.test(exe) ? 'PowerShell 7' : WIN_PS_51 }
     if (/cmd(\.exe)?$/i.test(exe)) return { exe, args: (c) => ['/d', '/s', '/c', c], label: 'cmd' }
     return { exe, args: (c) => ['-c', c], label: exe.split(/[\\/]/).pop() ?? 'shell' }
   }
-  if (isWin) return { exe: 'powershell.exe', args: (c) => ['-NoProfile', '-NonInteractive', '-Command', `${PS_UTF8}${c}`], label: 'PowerShell' }
+  if (isWin) {
+    const pwsh = findPwsh()
+    if (pwsh) return { exe: pwsh, args: (c) => ['-NoProfile', '-NonInteractive', '-Command', `${PWSH_UTF8}${c}`], label: 'PowerShell 7' }
+    // the agent is told, so it writes code to a file rather than losing its quotes
+    return { exe: 'powershell.exe', args: (c) => ['-NoProfile', '-NonInteractive', '-Command', `${PS_UTF8}${c}`], label: WIN_PS_51 }
+  }
   return { exe: process.env['SHELL'] || '/bin/bash', args: (c) => ['-c', c], label: 'bash' }
 }
 
@@ -201,19 +214,40 @@ export function createShellTools(cfg: ShellConfig): AgentTool[] {
         feedWatchers(job, s)
         ctx.output(ctx.callId, s)
       })
+      // A command can end while programs it started carry on holding its output (a server or test run
+      // left going in the background). Waiting for the output to close then waits for ever, and Stop
+      // cannot reach them: the shell they hung from is already gone. So once the shell itself has
+      // ended, or been stopped, Prism waits a moment for the last of the output and then lets go.
+      let settle: (code: number | null) => void = () => {}
       const done = new Promise<number | null>((resolve) => {
-        child.on('error', (e) => {
-          appendOut(job, `\n[failed to start: ${e.message}]`)
-          job.exitCode = -1
-          job.endedAt = Date.now()
-          resolve(-1)
-        })
-        child.on('close', (code) => {
+        settle = (code) => {
+          if (job.endedAt !== null) return
           job.exitCode = code
           job.endedAt = Date.now()
           resolve(code)
+        }
+        child.on('error', (e) => {
+          appendOut(job, `\n[failed to start: ${e.message}]`)
+          settle(-1)
+        })
+        child.on('close', (code) => settle(code))
+        child.on('exit', (code) => {
+          setTimeout(() => {
+            if (job.endedAt !== null) return
+            appendOut(job, '\n[the command ended, but programs it started are still running and holding its output; Prism stopped waiting for them]')
+            letGo(code)
+          }, 3000)
         })
       })
+      const letGo = (code: number | null): void => {
+        child.stdout?.destroy()
+        child.stderr?.destroy()
+        settle(code)
+      }
+      /** After a kill: if the output still has not closed a few seconds on, stop waiting for it. */
+      const giveUpSoon = (): void => {
+        setTimeout(() => letGo(null), 5000)
+      }
       if (background) {
         void done.then((code) => {
           if (job.partial) feedWatchers(job, '\n')
@@ -243,6 +277,7 @@ export function createShellTools(cfg: ShellConfig): AgentTool[] {
         } catch {
           /* gone */
         }
+        giveUpSoon()
       }
       ctx.signal.addEventListener('abort', onAbort, { once: true })
 
@@ -263,6 +298,7 @@ export function createShellTools(cfg: ShellConfig): AgentTool[] {
         } catch {
           /* gone */
         }
+        giveUpSoon()
       }, timeoutMs)
       const code = await done
       clearTimeout(timer)

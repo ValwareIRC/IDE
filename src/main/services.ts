@@ -6,7 +6,7 @@ import { app, type BrowserWindow } from 'electron'
 import { existsSync, mkdirSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
-import { basename, join } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import type { McpStatus, ModelInfo, ModelRef, Settings } from '@shared/types'
 import { CH } from '@shared/ipc'
 import { Workspace } from '@core/fs/workspace'
@@ -39,6 +39,7 @@ import { homedir } from 'node:os'
 import gadgetRuntime from '@core/gadgets/runtime.mjs?raw'
 import { AgentHost } from './agent-host'
 import { TaskBoard } from './tasks'
+import type { TabsLayout } from '@core/agent/tools/window'
 
 /**
  * One workbench: a project open in Prism (or a window with none yet), with its own agent, terminals,
@@ -66,6 +67,11 @@ export class Services {
   readonly scratch: ScratchManager
   readonly customTools: CustomToolManager
   workspace: Workspace | null = null
+  /**
+   * Files from outside the project that the user opened in this window themselves ("Open with Prism").
+   * The editor and previews may read and save these; the agent's tools still stop at the project folder.
+   */
+  private outside = new Set<string>()
   private offWorkspace: (() => void) | null = null
   private offSettings: () => void
 
@@ -194,6 +200,41 @@ export class Services {
     if (img.isEmpty()) return null
     const scaled = img.getSize().width > 1400 ? img.resize({ width: 1400 }) : img
     return { mime: 'image/jpeg', base64: scaled.toJPEG(84).toString('base64') }
+  }
+
+  /** Let the editor and previews in this window open a file from outside the project. Only Prism's own launch handling calls this. */
+  allowOutside(abs: string): void {
+    this.outside.add(resolve(abs).toLowerCase())
+  }
+
+  /** The file's full path when it is one the user opened from outside the project; else null. */
+  outsideFile(p: string): string | null {
+    if (typeof p !== 'string' || !isAbsolute(p)) return null
+    const abs = resolve(p)
+    return this.outside.has(abs.toLowerCase()) ? abs : null
+  }
+
+  /**
+   * For a preview: a file opened from outside, or one beside it or below its folder (a model's
+   * textures and data sit next to it). Only read, never written.
+   */
+  outsideAsset(p: string): string | null {
+    if (!isAbsolute(p)) return null
+    const abs = resolve(p)
+    const key = abs.toLowerCase()
+    for (const f of this.outside) if (key === f || key.startsWith(dirname(f) + sep)) return abs
+    return null
+  }
+
+  /** The window's tab groups and tabs (renderer/src/shell/dockPlace.ts), for the agent's tabs_look. */
+  async tabs(): Promise<TabsLayout | null> {
+    const w = this.win()
+    if (!w || w.isDestroyed()) return null
+    try {
+      return (await w.webContents.executeJavaScript('window.__prismTabs ? window.__prismTabs() : null')) as TabsLayout | null
+    } catch {
+      return null
+    }
   }
 
   private async inspectGadget(id: string): Promise<GadgetLayoutCheck | null> {

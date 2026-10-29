@@ -12,6 +12,7 @@ import { useLayout } from '@/state/layout'
 import { useApp } from '@/state/app'
 import { cx } from '@/lib/format'
 import { report } from '@/demo/bus'
+import { copyText } from '@/lib/copy'
 import { fontReady } from '@/lib/fonts'
 
 const AGENT_TAB = '__agent__'
@@ -210,7 +211,7 @@ function XtermView({ id, visible }: { id: string; visible: boolean }): React.JSX
     const term = termRef.current
     const sel = term?.getSelection() ?? ''
     return [
-      { label: 'Copy', hint: 'Ctrl+Shift+C', disabled: !sel, onClick: () => void navigator.clipboard.writeText(sel) },
+      { label: 'Copy', hint: 'Ctrl+Shift+C', disabled: !sel, onClick: () => void copyText(sel) },
       { label: 'Paste', hint: 'Ctrl+Shift+V', onClick: () => void navigator.clipboard.readText().then((t) => prism.terminals.write(id, t)) },
       { label: 'Select all', onClick: () => term?.selectAll() },
       { label: 'Clear', onClick: () => term?.clear() },
@@ -274,7 +275,7 @@ function XtermView({ id, visible }: { id: string; visible: boolean }): React.JSX
     term.onResize(({ cols, rows }) => prism.terminals.resize(id, cols, rows))
     term.onSelectionChange(() => {
       const sel = term.getSelection()
-      if (sel && useApp.getState().settings?.terminal.copyOnSelect) void navigator.clipboard.writeText(sel)
+      if (sel && useApp.getState().settings?.terminal.copyOnSelect) void copyText(sel)
     })
     setTimeout(() => {
       try {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Check, Copy, WrapText } from 'lucide-react'
 import { highlight, normalizeLang } from '@/lib/shiki'
+import { copyText } from '@/lib/copy'
 import { cx } from '@/lib/format'
 
 function escapeHtml(s: string): string {
@@ -26,7 +27,8 @@ export function CodeBlock({ code, lang, file, maxHeight }: { code: string; lang?
   }, [code, l])
 
   const copy = (): void => {
-    void navigator.clipboard.writeText(code).then(() => {
+    void copyText(code).then((ok) => {
+      if (!ok) return
       setCopied(true)
       setTimeout(() => setCopied(false), 1200)
     })

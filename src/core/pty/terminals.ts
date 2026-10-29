@@ -4,6 +4,7 @@ import { basename } from 'node:path'
 import type { IPty } from 'node-pty'
 import type { TerminalInfo, TerminalKind } from '@shared/types'
 import { placeOf, remotePath } from '@shared/place'
+import { findPwsh } from './pwsh'
 import { sq, sshArgs } from '../remote/command'
 
 export interface TerminalRecord {
@@ -18,9 +19,9 @@ const SCROLLBACK_CHARS = 200_000
 export function defaultShell(override: string | null): string {
   if (override && override.trim()) return override.trim()
   if (process.platform === 'win32') {
-    return process.env['COMSPEC'] && /pwsh|powershell/i.test(process.env['SHELL'] ?? '')
-      ? process.env['SHELL']!
-      : 'powershell.exe'
+    if (process.env['COMSPEC'] && /pwsh|powershell/i.test(process.env['SHELL'] ?? '')) return process.env['SHELL']!
+    // PowerShell 7 when there is one: 5.1 strips the quotes inside arguments to other programs (pty/pwsh.ts)
+    return findPwsh() ?? 'powershell.exe'
   }
   return process.env['SHELL'] || '/bin/bash'
 }

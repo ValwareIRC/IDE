@@ -13,12 +13,16 @@ import { GADGET_BASE_CSS, GADGET_SDK_JS } from '@core/gadgets/sdk'
 import { GADGET_KIT_CSS, GADGET_KIT_JS } from '@core/gadgets/kit'
 import { placeOf } from '@shared/place'
 import { bootLog } from './bootlog'
+import { handedPath, placeHanded } from './handover'
+import { CH } from '@shared/ipc'
 
 bootLog(`Prism ${app.getVersion()} starting on ${process.platform}`, process.argv.slice(1).join(' '))
 
 app.setName('prism')
-// the installer's shortcuts carry this id; Windows uses it to group the window and name notifications
-if (process.platform === 'win32') app.setAppUserModelId('com.valware.prism')
+// The installer's shortcuts carry this id; Windows groups the window and names notifications by it.
+// A development copy runs as electron.exe, and sharing the id let a taskbar pin made from Prism
+// point at that electron.exe instead, so it shows as "Electron"; it gets an id of its own.
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'com.valware.prism' : 'com.valware.prism.dev')
 
 // A second profile, so a development copy can run beside the everyday one.
 if (process.env['PRISM_USER_DATA']) app.setPath('userData', process.env['PRISM_USER_DATA'])
@@ -79,11 +83,45 @@ function openWindow(root: string | null): BrowserWindow {
   }
   host!.attach(client, root)
   windows.add(win)
+  win.on('focus', () => (lastFocused = win))
   win.on('closed', () => {
+    if (lastFocused === win) lastFocused = null
     windows.delete(win)
     host?.detach(id)
   })
   return win
+}
+
+/** The Prism window used last: Explorer has the focus when "Open with Prism" is chosen, so the focused one will not do. */
+let lastFocused: BrowserWindow | null = null
+
+/** Open a file or folder handed to Prism (main/handover.ts says where each goes). */
+function openHanded(path: string): boolean {
+  if (!host) return false
+  const where = placeHanded(path, host.workbenches().map((b) => b.workspace?.root ?? '').filter(Boolean))
+  if (!where) return false
+  bootLog('handed', path, '->', where.root ?? '(no project)', where.file ?? '')
+  const windowOf = (w: BrowserWindow | null | undefined): Client | undefined =>
+    w && !w.isDestroyed() ? host!.clientById(`win:${w.webContents.id}`)?.client : undefined
+  let there: Client | undefined
+  if (where.root) {
+    const bench = host.byRoot(where.root)
+    there = bench ? host.clientsOf(bench).find((c) => c.kind === 'window') : undefined
+  } else {
+    there = windowOf(lastFocused) ?? windowOf([...windows].pop())
+  }
+  if (there) {
+    if (where.file && !where.root) host.clientById(there.id)?.wb.allowOutside(where.file)
+    there.focus()
+    if (where.file) there.send(CH.WinHandedFile, where.file)
+    return true
+  }
+  const win = openWindow(where.root)
+  if (where.file) {
+    if (!where.root) host.clientById(`win:${win.webContents.id}`)?.wb.allowOutside(where.file)
+    host.handedFiles.set(win.webContents.id, where.file)
+  }
+  return true
 }
 
 interface WindowState {
@@ -233,16 +271,18 @@ function newer(a: string, b: string): boolean {
   return false
 }
 
-// Windows groups notifications and taskbar entries by this id; without it Electron makes an "Electron" Start-menu shortcut
-if (process.platform === 'win32') app.setAppUserModelId('com.valware.prism')
-
 // a second launch hands over its version and program path, so a newly installed Prism can replace an older one still open
 const gotLock = app.requestSingleInstanceLock({ version: app.getVersion(), exe: process.execPath })
 if (!gotLock) {
   app.quit()
 } else {
-  app.on('second-instance', (_e, _argv, _cwd, data) => {
+  app.on('second-instance', (_e, argv, cwd, data) => {
     const other = (data ?? {}) as { version?: string; exe?: string }
+    // "Open with Prism" on something while Prism is open: open it here and stop
+    const handed = handedPath(argv, cwd, !!process.defaultApp)
+    // (unless it is a newer Prism, which is offered the switch below)
+    const isNewer = typeof other.version === 'string' && newer(other.version, app.getVersion())
+    if (handed && !isNewer && openHanded(handed)) return
     const front = BrowserWindow.getFocusedWindow() ?? [...windows].pop() ?? null
     if (front) {
       if (front.isMinimized()) front.restore()
@@ -294,6 +334,7 @@ if (!gotLock) {
         const any = services?.workbenches()[0]
         if (u.hostname === 'hf' && services) return serveModelFile(services.shared.userData, rel, req)
         if (project) abs = ws?.abs(rel) ?? null
+        else if (u.hostname.startsWith('out-')) abs = services?.byId(u.hostname.slice(4))?.outsideAsset(rel) ?? null
         else if (u.hostname === 'attach') abs = any?.attachmentPath(rel) ?? null
         else if (u.hostname === 'theme') abs = any?.themeFile(rel) ?? null
         if (!abs) return new Response('not found', { status: 404 })
@@ -376,6 +417,8 @@ if (!gotLock) {
     })
     const last = host.shared.settings.get().recentWorkspaces[0]
     // an SSH folder is opened without asking the other computer first; if it cannot be reached, the first use says so
+    const handed = handedPath(process.argv, process.cwd(), !!process.defaultApp)
+    if (handed && openHanded(handed)) return
     bootLog('opening the first window', last ?? '(no project)')
     openWindow(last && (placeOf(last).kind === 'ssh' || existsSync(last)) ? last : null)
   })

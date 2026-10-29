@@ -149,4 +149,6 @@ function addClient(host, ws) {
   ws.on('error', gone)
 }
 
-http.listen(PORT, '127.0.0.1', () => log(`relay on 127.0.0.1:${PORT}${SECRET ? ' (behind a secret segment)' : ' (open)'}`))
+// only this computer by default, behind a web server that adds TLS; HOST=0.0.0.0 for a server without one
+const HOST = (process.env.HOST || '127.0.0.1').trim()
+http.listen(PORT, HOST, () => log(`relay on ${HOST}:${PORT}${SECRET ? ' (behind a secret segment)' : ' (open)'}`))

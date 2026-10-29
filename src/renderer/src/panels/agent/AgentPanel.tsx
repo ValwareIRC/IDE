@@ -31,6 +31,7 @@ import { CallBar } from './CallBar'
 import { clearHighlights, highlightTerms, useFind } from '@/state/find'
 import { matchItems, terms, type ConvPart } from '@shared/convSearch'
 import { readAloud, useReading } from '@/lib/speech'
+import { copyText } from '@/lib/copy'
 import { useCall } from '@/lib/call'
 
 const NO_ITEMS: TranscriptItem[] = []
@@ -895,7 +896,7 @@ function ItemView({
   const onCall = useCall((st) => !!st.on)
   const text = item.kind === 'user' || item.kind === 'assistant' ? item.text : item.kind === 'system' ? item.text : ''
   const entries = (): MenuEntry[] => {
-    const out: MenuEntry[] = [{ label: 'Copy text', onClick: () => void navigator.clipboard.writeText(text) }]
+    const out: MenuEntry[] = [{ label: 'Copy text', onClick: () => void copyText(text) }]
     if (item.kind === 'user') {
       out.push(
         { label: 'Edit and resend', disabled: !canRewind, onClick: onRewind },
@@ -982,7 +983,7 @@ function ItemView({
                 {reading ? 'stop' : 'play'}
               </button>
             )}
-            <button className="msg-copy" title="Copy" onClick={() => void navigator.clipboard.writeText(item.text)}>
+            <button className="msg-copy" title="Copy" onClick={() => void copyText(item.text)}>
               copy
             </button>
             {item.text.trim() && !item.agent && (
